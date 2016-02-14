@@ -12,7 +12,10 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
-struct pstat pstats;
+struct {
+  struct spinlock lock;
+  struct pstat ps;
+} pstats; 
 
 static struct proc *initproc;
 
@@ -26,6 +29,7 @@ void
 pinit(void)
 {
   initlock(&ptable.lock, "ptable");
+  initlock(&pstats.lock, "pstats");
 }
 
 // Look in the process table for an UNUSED proc.
@@ -37,9 +41,10 @@ allocproc(void)
 {
   struct proc *p;
   char *sp;
+  int i = 0;
 
   acquire(&ptable.lock);
-  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++)
     if(p->state == UNUSED)
       goto found;
   release(&ptable.lock);
@@ -48,6 +53,7 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  p->pri = 1;
   release(&ptable.lock);
 
   // Allocate kernel stack if possible.
@@ -70,6 +76,13 @@ found:
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
   p->context->eip = (uint)forkret;
+
+  acquire(&pstats.lock);
+  pstats.ps.inuse[i] = 1;
+  pstats.ps.pid[i] = p->pid;
+  pstats.ps.hticks[i] = 0;
+  pstats.ps.lticks[i] = 0;
+  release(&pstats.lock);
 
   return p;
 }
@@ -142,6 +155,11 @@ fork(void)
     kfree(np->kstack);
     np->kstack = 0;
     np->state = UNUSED;
+
+    acquire(&pstats.lock);
+    for (i = 0; i < NPROC; i++)
+      if (np->pid == pstats.ps.pid[i]) pstats.ps.inuse[i] = 0;
+    release(&pstats.lock);
     return -1;
   }
   np->sz = proc->sz;
@@ -211,13 +229,13 @@ int
 wait(void)
 {
   struct proc *p;
-  int havekids, pid;
+  int havekids, pid, i = 0;
 
   acquire(&ptable.lock);
   for(;;){
     // Scan through table looking for zombie children.
     havekids = 0;
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++, i++){
       if(p->parent != proc)
         continue;
       havekids = 1;
@@ -233,6 +251,11 @@ wait(void)
         p->name[0] = 0;
         p->killed = 0;
         release(&ptable.lock);
+
+        acquire(&pstats.lock);
+        pstats.ps.inuse[i] = 0;
+        release(&pstats.lock);
+
         return pid;
       }
     }
@@ -248,6 +271,55 @@ wait(void)
   }
 }
 
+// Set priority of calling process
+int
+setpri(int num)
+{
+    int i;
+
+    // TODO REMOVE vvv
+    if (num == 42) {
+      acquire(&ptable.lock);
+      for (i = 0; i < NPROC; i++) {
+        if (ptable.proc[i].pid == proc->pid) {
+          i = ptable.proc[i].pri = 2;
+          release(&ptable.lock);
+          return i;
+        }
+      }
+    }
+    // TODO Remove ^^^
+
+    if (num < 1 || num > 2)
+      return -1;
+
+    acquire(&ptable.lock);
+    for (i = 0; i < NPROC; i++) {
+      if (ptable.proc[i].pid == proc->pid) {
+        ptable.proc[i].pri = num;
+        release(&ptable.lock);
+        return 0;
+      }
+    }
+
+    release(&ptable.lock);
+    return -1;
+}
+
+// Returns a copy of pstats
+int
+getpinfo(struct pstat* ptr)
+{
+    int i;
+    for (i = 0; i < NPROC; i++) {
+      ptr->inuse[i] = pstats.ps.inuse[i];
+      ptr->pid[i] = pstats.ps.pid[i];
+      ptr->lticks[i] = pstats.ps.lticks[i];
+      ptr->hticks[i] = pstats.ps.hticks[i];
+    }
+    return 0;
+}
+
 // Per-CPU process scheduler.
 // Each CPU calls scheduler() after setting itself up.
 // Scheduler never returns.  It loops, doing:
@@ -259,20 +331,51 @@ void
 scheduler(void)
 {
   struct proc *p;
+  char searching = 0;
+  char find_1 = 0;
+  cprintf("sched enter %d\n", proc->pid);
 
   for(;;){
     // Enable interrupts on this processor.
     sti();
 
     // Loop over process table looking for process to run.
+    // Start at the current process to continue round-robining
     acquire(&ptable.lock);
-    for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-      if(p->state != RUNNABLE)
+    acquire(&pstats.lock);
+    p = proc;
+    while (1) { //for(p = proc; p < &ptable.proc[NPROC]; p++){
+      if (searching) {
+        if (p->pid == proc->pid) {
+          if (proc->pri == 2) break; // proc is the only 2
+          
+          find_1 = 1; // no 2s, so find a 1
+          p++; continue;
+        }
+
+        if (p->state == RUNNABLE) {
+          if (p->pri == 2) goto schedule;
+          if (find_1) goto schedule;
+        }
+
+        if (++p == &ptable.proc[NPROC])
+          p = ptable.proc;
+
         continue;
+      }
+      else if (p->pid == proc->pid) {
+        searching = 1;
+        cprintf("sched search=on %d\n", proc->pid);
+        if (++p == &ptable.proc[NPROC])
+          p = ptable.proc;
+        continue;
+      }
 
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+schedule:
+      cprintf("sched picked %d\n", proc->pid);
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
@@ -283,6 +386,7 @@ scheduler(void)
       // It should have changed its p->state before coming back.
       proc = 0;
     }
+    release(&pstats.lock);
     release(&ptable.lock);
 
   }
@@ -297,6 +401,8 @@ sched(void)
 
   if(!holding(&ptable.lock))
     panic("sched ptable.lock");
+  if(!holding(&pstats.lock))
+    panic("sched pstats.lock");
   if(cpu->ncli != 1)
     panic("sched locks");
   if(proc->state == RUNNING)
@@ -313,9 +419,11 @@ void
 yield(void)
 {
   acquire(&ptable.lock);  //DOC: yieldlock
+  acquire(&pstats.lock);
   proc->state = RUNNABLE;
   sched();
   release(&ptable.lock);
+  release(&pstats.lock);
 }
 
 // A fork child's very first scheduling by scheduler()
@@ -323,8 +431,9 @@ yield(void)
 void
 forkret(void)
 {
-  // Still holding ptable.lock from scheduler.
+  // Still holding locks from scheduler.
   release(&ptable.lock);
+  release(&pstats.lock);
   
   // Return to "caller", actually trapret (see allocproc).
 }

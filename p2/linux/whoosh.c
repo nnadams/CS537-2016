@@ -10,7 +10,7 @@
 #define   LINE_LEN 128
 
 char error_msg[30] = "An error has occurred\n";
-#define error() fprintf(stdout, error_msg)
+#define error() fprintf(stderr, error_msg)
 #define die() { error(); exit(1); }
 #define check(A) if(!(A)) die()
 
@@ -19,11 +19,17 @@ int main(int argc, char *argv[]) {
     char *token, *str, *slashed, buffer[PATH_MAX], line[LINE_LEN+2];
     char path[128][PATH_MAX] = { "/bin" }, *args[LINE_LEN];
 
-    while (1) { printf("whoosh> ");
+    setbuf(stdout, NULL);
+    while (1) {
+loop_start:
+      printf("whoosh> ");
       check( fgets(line, LINE_LEN+3, stdin) );
-      if (strnlen(line, LINE_LEN+2) > LINE_LEN+1) error();
+      if (strnlen(line, LINE_LEN+2) > LINE_LEN+1) {
+          while ( (buffer[0] = fgetc(stdin)) != '\n' && buffer[0] != EOF);
+          error(); continue;
+      }
 
-      str = strtok(line, "\n"); //if (str == NULL) continue;
+      str = strtok(line, "\n"); if (str == NULL) continue;
       token = strtok(str, " "); if (token == NULL) continue;
       if (strncmp(token, "exit", 4) == 0) exit(0);
       else if (strncmp(token, "pwd", 3) == 0) {
@@ -49,6 +55,7 @@ int main(int argc, char *argv[]) {
                       if (strncmp(token, ">", 1) == 0) {
                           if ( (token = strtok(NULL, " ")) != NULL ) {
                               close(STDOUT_FILENO);
+                              if (access(token, W_OK) != 0) { error(); goto loop_start; }
                               check( open(token, O_CREAT | O_TRUNC | 
                                       O_WRONLY, 0644) ); 
                               arg--; break;
