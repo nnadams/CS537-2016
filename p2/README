@@ -1,0 +1,20 @@
+Nick Adams - 2/15/2016
+
+2a
+    - Created simple whoosh shell
+        - Get line of input, check if it's a built in cmd, if so handle it
+        - If not, fork
+            - Parent waits for child to return
+            - Child
+                - Build the args list
+                - If doing redirection close std's and open specified files
+                - Try and execute the given command in each availible path
+
+2b
+    - Added priority field to proc structure
+    - Add pstats which holds process info
+    - Added 2 system calls: setpri and getpinfo
+    - Updated scheduler to schedule according to priority
+        - Starting at the slot after the last scheduled proc, check the table
+      for a process with priority 2. Wrap around to the beginning of the list.
+        - If no 2 is found check the list again for any runnable process
