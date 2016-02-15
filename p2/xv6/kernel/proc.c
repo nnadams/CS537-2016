@@ -204,6 +204,7 @@ exit(void)
   proc->cwd = 0;
 
   acquire(&ptable.lock);
+  acquire(&pstats.lock);
 
   // Parent might be sleeping in wait().
   wakeup1(proc->parent);
@@ -232,6 +233,7 @@ wait(void)
   int havekids, pid, i = 0;
 
   acquire(&ptable.lock);
+  acquire(&pstats.lock);
   for(;;){
     // Scan through table looking for zombie children.
     havekids = 0;
@@ -252,7 +254,6 @@ wait(void)
         p->killed = 0;
         release(&ptable.lock);
 
-        acquire(&pstats.lock);
         pstats.ps.inuse[i] = 0;
         release(&pstats.lock);
 
@@ -263,6 +264,7 @@ wait(void)
     // No point waiting if we don't have any children.
     if(!havekids || proc->killed){
       release(&ptable.lock);
+      release(&pstats.lock);
       return -1;
     }
 
@@ -276,19 +278,6 @@ int
 setpri(int num)
 {
     int i;
-
-    // TODO REMOVE vvv
-    if (num == 42) {
-      acquire(&ptable.lock);
-      for (i = 0; i < NPROC; i++) {
-        if (ptable.proc[i].pid == proc->pid) {
-          i = ptable.proc[i].pri = 2;
-          release(&ptable.lock);
-          return i;
-        }
-      }
-    }
-    // TODO Remove ^^^
 
     if (num < 1 || num > 2)
       return -1;
@@ -311,6 +300,9 @@ int
 getpinfo(struct pstat* ptr)
 {
     int i;
+    
+    if (ptr == NULL) return -1;
+    
     for (i = 0; i < NPROC; i++) {
       ptr->inuse[i] = pstats.ps.inuse[i];
       ptr->pid[i] = pstats.ps.pid[i];
@@ -331,9 +323,6 @@ void
 scheduler(void)
 {
   struct proc *p;
-  char searching = 0;
-  char find_1 = 0;
-  cprintf("sched enter %d\n", proc->pid);
 
   for(;;){
     // Enable interrupts on this processor.
@@ -343,7 +332,7 @@ scheduler(void)
     // Start at the current process to continue round-robining
     acquire(&ptable.lock);
     acquire(&pstats.lock);
-    p = proc;
+    /*p = proc;
     while (1) { //for(p = proc; p < &ptable.proc[NPROC]; p++){
       if (searching) {
         if (p->pid == proc->pid) {
@@ -371,11 +360,14 @@ scheduler(void)
         continue;
       }
 
+schedule:*/
+      //cprintf("sched picked %d\n", proc->pid);
+      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
+        if(p->state != RUNNABLE)
+          continue;
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
-schedule:
-      cprintf("sched picked %d\n", proc->pid);
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
@@ -403,7 +395,7 @@ sched(void)
     panic("sched ptable.lock");
   if(!holding(&pstats.lock))
     panic("sched pstats.lock");
-  if(cpu->ncli != 1)
+  if(cpu->ncli != 2)
     panic("sched locks");
   if(proc->state == RUNNING)
     panic("sched running");
@@ -457,6 +449,7 @@ sleep(void *chan, struct spinlock *lk)
   // so it's okay to release lk.
   if(lk != &ptable.lock){  //DOC: sleeplock0
     acquire(&ptable.lock);  //DOC: sleeplock1
+    acquire(&pstats.lock);
     release(lk);
   }
 
@@ -471,6 +464,7 @@ sleep(void *chan, struct spinlock *lk)
   // Reacquire original lock.
   if(lk != &ptable.lock){  //DOC: sleeplock2
     release(&ptable.lock);
+    release(&pstats.lock);
     acquire(lk);
   }
 }
