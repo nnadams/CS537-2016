@@ -1,6 +1,9 @@
 #ifndef _PROC_H_
 #define _PROC_H_
 
+#include "spinlock.h"
+#include "pstat.h"
+
 // Segments in proc->gdt.
 // Also known to bootasm.S and trapasm.S
 #define SEG_KCODE 1  // kernel code
@@ -28,6 +31,13 @@ struct cpu {
 
 extern struct cpu cpus[NCPU];
 extern int ncpu;
+
+struct pstat_struct {
+  struct spinlock lock;
+  struct pstat ps;
+}; 
+
+extern struct pstat_struct pstats;
 
 // Per-CPU variables, holding pointers to the
 // current cpu and to the current process.

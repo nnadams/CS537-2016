@@ -52,6 +52,20 @@ trap(struct trapframe *tf)
       ticks++;
       wakeup(&ticks);
       release(&tickslock);
+
+      if (proc) {
+        int i = 0;
+        acquire(&pstats.lock);
+        for (i = 0; i < NPROC; i++) {
+          if (proc->pid == pstats.ps.pid[i]) {
+            if (proc->pri == 2)
+              pstats.ps.hticks[i]++;
+            else
+              pstats.ps.lticks[i]++;
+          }
+        }
+        release(&pstats.lock);
+      }
     }
     lapiceoi();
     break;

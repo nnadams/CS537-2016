@@ -3,8 +3,6 @@
 #include  <stdlib.h>
 #include  <string.h>
 #include  <unistd.h>
-#include  <linux/limits.h>
-#include  <sys/types.h>
 #include  <sys/wait.h>
 
 #define LINE_LEN 128
@@ -16,8 +14,8 @@
 
 int main(int argc, char *argv[]) {
     int paths = 2, itr, arg;
-    char *token, *str, buffer[PATH_MAX], line[LINE_LEN+2];
-    char path[128][PATH_MAX] = { "", "/bin/" }, *args[LINE_LEN];
+    char *token, *str, buffer[4097], line[LINE_LEN+2];
+    char path[129][4097] = { "", "/bin/" }, *args[LINE_LEN];
 
     if (argc > 1) die();  // Bad args
     setbuf(stdout, NULL); // Don't buffer
@@ -36,8 +34,7 @@ int main(int argc, char *argv[]) {
           printf("%s\n", buffer);
       } else if (strncmp(token, "cd", 2) == 0) {        // cd
           if ( (token = strtok(NULL, " ")) == NULL ) {  //    cd no args
-              str = getenv("HOME"); check(str);
-              if (chdir(str) != 0) error();
+              if (chdir(getenv("HOME")) != 0) error();
           } else if (chdir(token) != 0) error();        //    cd path
       } else if (strncmp(token, "path", 4) == 0) {      // path
           for (paths = 1; (token = strtok(NULL, " ")) != 0; paths++)
@@ -59,7 +56,7 @@ int main(int argc, char *argv[]) {
 
               for (itr = 0; itr < paths; itr++) { // try and exec the cmd 
                   check( str = strncat(strdup(path[itr]), args[0], LINE_LEN) );
-                  if (itr == 0 && args[0][0] != '/') continue; // no exec cur
+                  if (itr == 0 && args[0][0] != '/') continue; // no exec wd
                   else if (access(str, X_OK) != 0) continue; // check perms
                   else execv(args[0] = str, args); die();
               } die(); // die so parent can continue

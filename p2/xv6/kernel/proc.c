@@ -12,14 +12,12 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
-struct {
-  struct spinlock lock;
-  struct pstat ps;
-} pstats; 
+struct pstat_struct pstats;
 
 static struct proc *initproc;
 
 int nextpid = 1;
+int prev_pindex = 0;
 extern void forkret(void);
 extern void trapret(void);
 
@@ -277,22 +275,22 @@ wait(void)
 int
 setpri(int num)
 {
-    int i;
+    //int i;
 
     if (num < 1 || num > 2)
       return -1;
 
     acquire(&ptable.lock);
-    for (i = 0; i < NPROC; i++) {
+    /*for (i = 0; i < NPROC; i++) {
       if (ptable.proc[i].pid == proc->pid) {
         ptable.proc[i].pri = num;
         release(&ptable.lock);
         return 0;
       }
-    }
-
+    }*/
+    proc->pri = num;
     release(&ptable.lock);
-    return -1;
+    return 0;
 }
 
 // Returns a copy of pstats
@@ -323,6 +321,8 @@ void
 scheduler(void)
 {
   struct proc *p;
+  //int searching = 0;
+  //int find_1 = 0;
 
   for(;;){
     // Enable interrupts on this processor.
@@ -332,42 +332,47 @@ scheduler(void)
     // Start at the current process to continue round-robining
     acquire(&ptable.lock);
     acquire(&pstats.lock);
-    /*p = proc;
-    while (1) { //for(p = proc; p < &ptable.proc[NPROC]; p++){
-      if (searching) {
-        if (p->pid == proc->pid) {
-          if (proc->pri == 2) break; // proc is the only 2
-          
-          find_1 = 1; // no 2s, so find a 1
-          p++; continue;
-        }
 
-        if (p->state == RUNNABLE) {
-          if (p->pri == 2) goto schedule;
-          if (find_1) goto schedule;
-        }
+    int i = 0;
+    int prev_index = prev_pindex;
+    int index = prev_index + 1;
 
-        if (++p == &ptable.proc[NPROC])
-          p = ptable.proc;
+    p = &ptable.proc[index];
+    for(i = 0; i < NPROC; i++) {
+      if(p->state == RUNNABLE && p->pri == 2)
+        goto schedule;
 
-        continue;
+      if (++p >= &ptable.proc[NPROC-1]) {
+        p = ptable.proc;
+        index = 0;
       }
-      else if (p->pid == proc->pid) {
-        searching = 1;
-        cprintf("sched search=on %d\n", proc->pid);
-        if (++p == &ptable.proc[NPROC])
-          p = ptable.proc;
-        continue;
-      }
+      else index++;
+    }
 
-schedule:*/
-      //cprintf("sched picked %d\n", proc->pid);
-      for(p = ptable.proc; p < &ptable.proc[NPROC]; p++){
-        if(p->state != RUNNABLE)
-          continue;
+    index = prev_index + 1;
+    p = &ptable.proc[index];
+    for(i = 0; i < NPROC; i++) {
+      if(p->state == RUNNABLE)
+        goto schedule;
+
+      if (++p >= &ptable.proc[NPROC-1]) {
+        p = ptable.proc;
+        index = 0;
+      }
+      else index++;
+    }
+
+    prev_pindex = prev_index;
+    goto end;
+
+schedule:
+      //for(p = ptable.proc; p < &ptable.proc[NPROC]; p++)
+      //  if(p->state != RUNNABLE)
+      //    continue;
       // Switch to chosen process.  It is the process's job
       // to release ptable.lock and then reacquire it
       // before jumping back to us.
+      prev_pindex = index;
       proc = p;
       switchuvm(p);
       p->state = RUNNING;
@@ -377,7 +382,8 @@ schedule:*/
       // Process is done running for now.
       // It should have changed its p->state before coming back.
       proc = 0;
-    }
+    //}
+end:
     release(&pstats.lock);
     release(&ptable.lock);
 
