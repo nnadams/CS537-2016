@@ -245,7 +245,12 @@ allocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       return 0;
     }
     memset(mem, 0, PGSIZE);
-    mappages(pgdir, (char*)a, PGSIZE, PADDR(mem), PTE_W|PTE_U);
+
+    // make first page invalid
+    if (oldsz)
+      mappages(pgdir, (char*)a, PGSIZE, PADDR(mem), PTE_W|PTE_U);
+    else
+      mappages(pgdir, (char*)a, PGSIZE, PADDR(mem), 0);
   }
   return newsz;
 }
@@ -315,8 +320,18 @@ copyuvm(pde_t *pgdir, uint sz)
     if((mem = kalloc()) == 0)
       goto bad;
     memmove(mem, (char*)pa, PGSIZE);
-    if(mappages(d, (void*)i, PGSIZE, PADDR(mem), PTE_W|PTE_U) < 0)
-      goto bad;
+
+    // make first page invalid
+    if(i)
+    {
+      if(mappages(d, (void*)i, PGSIZE, PADDR(mem), PTE_W|PTE_U) < 0)
+        goto bad;
+    }
+    else
+    {
+      if(mappages(d, (void*)i, PGSIZE, PADDR(mem), 0) < 0)
+        goto bad;
+    }
   }
   return d;
 
