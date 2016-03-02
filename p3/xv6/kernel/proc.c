@@ -11,6 +11,12 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
+struct {
+  void* pages[NUM_SHPGS];
+  int procs[NUM_SHPGS];
+  struct spinlock locks[NUM_SHPGS];
+} shared_pages;
+
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -22,7 +28,27 @@ static void wakeup1(void *chan);
 void
 pinit(void)
 {
+  int i;
+
   initlock(&ptable.lock, "ptable");
+  for (i = 0; i < NUM_SHPGS; i++)
+  {
+    shared_pages.pages[i] = NULL;
+    shared_pages.procs[i] = 0;
+    initlock(&shared_pages.locks[i], "shpg");
+  }
+}
+
+void*
+shmem_access(int page_num)
+{
+  return NULL;
+}
+
+int
+shmem_count(int page_num)
+{
+  return 0;
 }
 
 // Look in the process table for an UNUSED proc.
@@ -62,6 +88,8 @@ found:
   // which returns to trapret.
   sp -= 4;
   *(uint*)sp = (uint)trapret;
+
+  memset(p->shared_access, 0, sizeof(int)*NUM_SHPGS); 
 
   sp -= sizeof *p->context;
   p->context = (struct context*)sp;
