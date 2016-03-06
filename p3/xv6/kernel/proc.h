@@ -1,5 +1,8 @@
 #ifndef _PROC_H_
 #define _PROC_H_
+
+#include "spinlock.h"
+
 // Segments in proc->gdt.
 // Also known to bootasm.S and trapasm.S
 #define SEG_KCODE 1  // kernel code
@@ -9,6 +12,8 @@
 #define SEG_UDATA 5  // user data+stack
 #define SEG_TSS   6  // this process's task state
 #define NSEGS     7
+
+#define NUM_SHPGS 4
 
 // Per-CPU state
 struct cpu {
@@ -74,8 +79,15 @@ struct proc {
   struct file *ofile[NOFILE];  // Open files
   struct inode *cwd;           // Current directory
   char name[16];               // Process name (debugging)
+  int shared_access[NUM_SHPGS];
+  void *shared_page[NUM_SHPGS];
 };
 
+struct {
+  void* pages[NUM_SHPGS];
+  int procs[NUM_SHPGS];
+  struct spinlock locks[NUM_SHPGS];
+} shared_pages;
 // Process memory is laid out contiguously, low addresses first:
 //   text
 //   original data and bss

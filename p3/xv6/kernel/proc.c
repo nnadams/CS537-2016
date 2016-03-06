@@ -63,6 +63,8 @@ found:
   sp -= 4;
   *(uint*)sp = (uint)trapret;
 
+  memset(p->shared_access, 0, sizeof(int)*NUM_SHPGS); 
+
   sp -= sizeof *p->context;
   p->context = (struct context*)sp;
   memset(p->context, 0, sizeof *p->context);
@@ -152,6 +154,11 @@ fork(void)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
+
+  for (i = 0; i < NUM_SHPGS; i++){
+    if (proc->shared_access[i])
+      shmem_access(i, np);
+  }
  
   pid = np->pid;
   np->state = RUNNABLE;
@@ -178,6 +185,8 @@ exit(void)
       proc->ofile[fd] = 0;
     }
   }
+
+  shmem_clean(proc);
 
   iput(proc->cwd);
   proc->cwd = 0;
@@ -438,6 +447,16 @@ procdump(void)
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
         cprintf(" %p", pc[i]);
+    }
+    cprintf("\n");
+  }
+  cprintf("\n");
+
+  int j;
+  for (i = 0; i < NUM_SHPGS; i++){
+    cprintf("pg%d= %d\t", i, shared_pages.pages[i]);
+    for (j = 0; j < PGSIZE; j++){
+      cprintf("%d ", *((char*)shared_pages.pages[i]+j));
     }
     cprintf("\n");
   }

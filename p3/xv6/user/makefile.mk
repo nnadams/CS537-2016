@@ -13,6 +13,7 @@ USER_PROGS := \
 	nullptr\
 	rm\
 	sh\
+	shmem\
 	stressfs\
 	tester\
 	usertests\
