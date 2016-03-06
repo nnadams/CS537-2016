@@ -258,7 +258,7 @@ int
 deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
 {
   pte_t *pte;
-  uint a, pa;
+  uint a, i, pa;
 
   if(newsz >= oldsz)
     return oldsz;
@@ -270,7 +270,13 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
       pa = PTE_ADDR(*pte);
       if(pa == 0)
         panic("kfree");
+      
+      // Don't free shared mem pages
+      for (i = 0; i < NUM_SHPGS; i++)
+        if (pa == PADDR(shared_pages.pages[i])) goto next;
+
       kfree((char*)pa);
+next:
       *pte = 0;
     }
   }
@@ -363,4 +369,76 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
     va = va0 + PGSIZE;
   }
   return 0;
+}
+
+void
+shmem_init(void)
+{
+  int page_num;
+  for (page_num = 0; page_num < NUM_SHPGS; page_num++)
+  {
+    shared_pages.procs[page_num] = 0;
+    initlock(&shared_pages.locks[page_num], "shpg");
+    shared_pages.pages[page_num] = kalloc();
+    if (shared_pages.pages[page_num] == 0)
+      panic("shmem init failed");
+    memset(shared_pages.pages[page_num], 0, PGSIZE);
+    cprintf("init shpage #%d at %d\n", page_num, shared_pages.pages[page_num]);
+  }
+}
+
+void
+shmem_clean(struct proc *p)
+{
+  int i;
+  for (i = 0; i < NUM_SHPGS; i++)
+  {
+    if (proc->shared_access[i])
+    {
+        proc->shared_access[i] = 0;
+        acquire(&shared_pages.locks[i]);
+        shared_pages.procs[i]--;
+        release(&shared_pages.locks[i]);
+    }
+  }
+}
+
+void*
+shmem_access(int page, struct proc *p)
+{
+  int perm = PTE_W | PTE_U;
+  uint pa = PADDR(shared_pages.pages[page]);
+  void *va = NULL;
+
+  if (page < 0 || page >= NUM_SHPGS)
+      return va;
+
+  if (!p->shared_access[page]) {
+    va = (void*)(USERTOP - ((page+1) * PGSIZE));
+    cprintf("mp(%d, %d, %d, %d, %d)\n" , p->pgdir, va, PGSIZE, pa, perm);
+    if (mappages(p->pgdir, va, PGSIZE, pa, perm) != 0)
+      panic("shmem_access: mappages failed");
+    else
+      cprintf("shmem_access: page #%d given to %d with va=%d", page, p->pid, va);
+
+    acquire(&shared_pages.locks[page]);
+    shared_pages.procs[page]++;
+    release(&shared_pages.locks[page]);
+
+    p->shared_access[page] = 1;
+    p->shared_page[page] = va;
+  }
+  else
+    va = p->shared_page[page];
+
+  return va;
+}
+
+int
+shmem_count(int page)
+{
+  if (page < 0 || page >= NUM_SHPGS)
+      return -1;
+
+  return shared_pages.procs[page];
 }

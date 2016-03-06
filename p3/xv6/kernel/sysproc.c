@@ -96,7 +96,7 @@ sys_shmem_access(void)
   if(argint(0, &n) < 0)
     return -1;
 
-  return (int)shmem_access(n);
+  return (int)shmem_access(n, proc);
 }
 
 int

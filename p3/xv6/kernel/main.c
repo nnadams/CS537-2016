@@ -62,6 +62,7 @@ mainc(void)
   cinit();
   sti();           // enable inturrupts
   userinit();      // first user process
+  shmem_init();    // allocate sharable pages
   scheduler();     // start running processes
 }
 

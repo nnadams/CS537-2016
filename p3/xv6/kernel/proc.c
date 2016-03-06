@@ -11,12 +11,6 @@ struct {
   struct proc proc[NPROC];
 } ptable;
 
-struct {
-  void* pages[NUM_SHPGS];
-  int procs[NUM_SHPGS];
-  struct spinlock locks[NUM_SHPGS];
-} shared_pages;
-
 static struct proc *initproc;
 
 int nextpid = 1;
@@ -28,27 +22,7 @@ static void wakeup1(void *chan);
 void
 pinit(void)
 {
-  int i;
-
   initlock(&ptable.lock, "ptable");
-  for (i = 0; i < NUM_SHPGS; i++)
-  {
-    shared_pages.pages[i] = NULL;
-    shared_pages.procs[i] = 0;
-    initlock(&shared_pages.locks[i], "shpg");
-  }
-}
-
-void*
-shmem_access(int page_num)
-{
-  return NULL;
-}
-
-int
-shmem_count(int page_num)
-{
-  return 0;
 }
 
 // Look in the process table for an UNUSED proc.
@@ -180,6 +154,11 @@ fork(void)
     if(proc->ofile[i])
       np->ofile[i] = filedup(proc->ofile[i]);
   np->cwd = idup(proc->cwd);
+
+  for (i = 0; i < NUM_SHPGS; i++){
+    if (proc->shared_access[i])
+      shmem_access(i, np);
+  }
  
   pid = np->pid;
   np->state = RUNNABLE;
@@ -206,6 +185,8 @@ exit(void)
       proc->ofile[fd] = 0;
     }
   }
+
+  shmem_clean(proc);
 
   iput(proc->cwd);
   proc->cwd = 0;
@@ -466,6 +447,16 @@ procdump(void)
       getcallerpcs((uint*)p->context->ebp+2, pc);
       for(i=0; i<10 && pc[i] != 0; i++)
         cprintf(" %p", pc[i]);
+    }
+    cprintf("\n");
+  }
+  cprintf("\n");
+
+  int j;
+  for (i = 0; i < NUM_SHPGS; i++){
+    cprintf("pg%d= %d\t", i, shared_pages.pages[i]);
+    for (j = 0; j < PGSIZE; j++){
+      cprintf("%d ", *((char*)shared_pages.pages[i]+j));
     }
     cprintf("\n");
   }
