@@ -83,7 +83,7 @@ ifndef CPUS
 CPUS := 2
 endif
 
-QEMUOPTS := -hdb fs.img xv6.img -smp $(CPUS)
+QEMUOPTS := -drive file=xv6.img,index=0,media=disk,format=raw -drive file=fs.img,index=1,media=disk,format=raw -smp $(CPUS)
 
 ################################################################################
 # Main Targets
