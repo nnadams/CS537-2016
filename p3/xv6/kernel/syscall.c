@@ -17,7 +17,16 @@
 int
 fetchint(struct proc *p, uint addr, int *ip)
 {
-  if(addr >= p->sz || addr+4 > p->sz)
+  uint page, count=0;
+
+  if(addr > USERTOP)
+    return -1;
+
+  for(page = 0; page < NUM_SHPGS; page++){
+    if(p->shared_access[page]) count++;
+  }
+  if( (addr >= p->sz || addr+4 > p->sz) &&
+      (addr < (USERTOP - count*PGSIZE)) )
     return -1;
   *ip = *(int*)(addr);
   return 0;
@@ -30,11 +39,24 @@ int
 fetchstr(struct proc *p, uint addr, char **pp)
 {
   char *s, *ep;
+  uint page, count=0;
 
-  if(addr >= p->sz)
+
+  for(page = 0; page < NUM_SHPGS; page++){
+    if(p->shared_access[page]) count++;
+  }
+
+  if(addr >= USERTOP)
     return -1;
+  if( (addr >= p->sz && (addr < (USERTOP - count*PGSIZE))) )
+    return -1;
+
   *pp = (char*)addr;
-  ep = (char*)p->sz;
+  if (addr >= (USERTOP - count*PGSIZE))
+    ep = (char*)USERTOP;
+  else
+    ep = (char*)p->sz;
+
   for(s = *pp; s < ep; s++)
     if(*s == 0)
       return s - *pp;
@@ -55,11 +77,21 @@ int
 argptr(int n, char **pp, int size)
 {
   int i;
+  uint page, count=0;
   
   if(argint(n, &i) < 0)
     return -1;
-  if((uint)i >= proc->sz || (uint)i+size > proc->sz)
+  if((uint)i < PGSIZE)
     return -1;
+  if((uint)i > USERTOP || (uint)i+size > USERTOP)
+    return -1;
+
+  for(page = 0; page < NUM_SHPGS; page++){
+    if(proc->shared_access[page]) count++;
+  }
+
+  if( ((uint)i >= proc->sz || (uint)i+size > proc->sz) &&
+      ((uint)i < (USERTOP - count*PGSIZE)) ) return -1;
   *pp = (char*)i;
   return 0;
 }

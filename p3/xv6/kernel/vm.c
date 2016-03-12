@@ -86,6 +86,8 @@ mappages(pde_t *pgdir, void *la, uint size, uint pa, int perm)
     pte = walkpgdir(pgdir, a, 1);
     if(pte == 0)
       return -1;
+    if(*pte & PTE_SH)
+      return -1;
     if(*pte & PTE_P)
       panic("remap");
     *pte = pa | perm | PTE_P;
@@ -421,18 +423,27 @@ shmem_clean(struct proc *p)
 void*
 shmem_access(int page, struct proc *p)
 {
-  int perm = PTE_W | PTE_U;
-  uint pa = PADDR(shared_pages.pages[page]);
+  int i, count=0;
+  int perm = PTE_SH | PTE_W | PTE_U;
+  uint pa;
   void *va = NULL;
 
   if (page < 0 || page >= NUM_SHPGS)
       return va;
 
+  pa = PADDR(shared_pages.pages[page]);
+
   if (!p->shared_access[page]) {
-    va = (void*)(USERTOP - ((page+1) * PGSIZE));
+    for (i = 0; i < NUM_SHPGS; i++){
+      if (p->shared_access[i]) count++;
+    }
+
+    va = (void*)(USERTOP - ((count+1) * PGSIZE));
+    if ((uint)va <= p->sz) return NULL;
+
     cprintf("mp(%d, %d, %d, %d, %d)\n" , p->pgdir, va, PGSIZE, pa, perm);
     if (mappages(p->pgdir, va, PGSIZE, pa, perm) != 0)
-      panic("shmem_access: mappages failed");
+      return NULL; //panic("shmem_access: mappages failed");
     else
       cprintf("shmem_access: page #%d given to %d with va=%d", page, p->pid, va);
 

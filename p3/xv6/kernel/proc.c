@@ -108,9 +108,17 @@ userinit(void)
 int
 growproc(int n)
 {
+  uint i, count=0;
   uint sz;
   
   sz = proc->sz;
+
+  for(i = 0; i < NUM_SHPGS; i++){
+    if (proc->shared_access[i]) count++;
+  }
+  if ( (sz+n) > (USERTOP - (count+1)*PGSIZE) )
+    return -1;
+
   if(n > 0){
     if((sz = allocuvm(proc->pgdir, sz, sz + n)) == 0)
       return -1;
