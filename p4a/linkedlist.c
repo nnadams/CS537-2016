@@ -18,8 +18,22 @@ List *ll_init(int size) {
     return new;
 }
 
+void ll_destory(List *list) {
+    ListNode *cur = list->head;
+    ListNode *tmp;
+
+    while(cur != NULL) {
+        tmp = cur->next;
+        free(cur->data);
+        free(cur);
+        cur = tmp;
+    }
+
+    free(list);
+}
+
 int ll_insert_front(List *list, const void *data) {
-    if (list->maxsize == list->size)
+    if (list->maxsize > 0 && list->maxsize == list->size)
         return -1;
 
     ListNode *new = malloc(sizeof(ListNode));
@@ -27,7 +41,7 @@ int ll_insert_front(List *list, const void *data) {
         return -1;
 
     new->data = (void *)data;
-    
+
     if (list->size == 0) {
         list->head = new;
         list->tail = new;
@@ -51,7 +65,7 @@ int ll_insert_end(List *list, const void *data) {
         return -1;
 
     new->data = (void *)data;
-    
+
     if (list->size == 0) {
         list->head = new;
         list->tail = new;
@@ -73,7 +87,6 @@ void *ll_pop_front(List *list) {
     void *data = list->head->data;
     list->head = list->head->next;
     list->size--;
-    
+
     return data;
 }
-

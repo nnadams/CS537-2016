@@ -7,13 +7,16 @@ file_tester : file_tester.c libcrawler.so
 web_tester : web_tester.c cs537.c libcrawler.so
 	gcc -g -L. -lcrawler -lpthread web_tester.c cs537.c -Wall -Werror -o web_tester
 
-libcrawler.so : crawler.c linkedlist.o
+libcrawler.so : crawler.c hashtable.o linkedlist.o
 	gcc -g -fpic -c crawler.c -Wall -Werror -o crawler.o
-	gcc -g -shared -o libcrawler.so crawler.o linkedlist.o
+	gcc -g -shared -o libcrawler.so crawler.o hashtable.o linkedlist.o
+
+hashtable.o : hashtable.c linkedlist.o
+	gcc -g -fpic -c hashtable.c -Wall -Werror -o hashtable.o
 
 linkedlist.o : linkedlist.c linkedlist.h
 	gcc -g -fpic -c linkedlist.c -Wall -Werror -o linkedlist.o
 
 .PHONY: clean
 clean :
-	rm -f file_tester web_tester libcrawler.so *.o *~
+	rm -f file_tester web_tester libcrawler.so *.o *~ .fuse*
