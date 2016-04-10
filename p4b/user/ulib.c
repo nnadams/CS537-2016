@@ -4,6 +4,8 @@
 #include "user.h"
 #include "x86.h"
 
+#define PGSIZE (4096)
+
 char*
 strcpy(char *s, char *t)
 {
@@ -105,27 +107,48 @@ memmove(void *vdst, void *vsrc, int n)
 }
 
 int
-thread_create(void (*start_routine)(void*), void *arg) {
+thread_create(void (*start_routine)(void*), void *arg)
+{
+  void *stack = malloc(PGSIZE*2);
+  if (stack == NULL)
+    return -1;
+
+  if((uint)stack % PGSIZE)
+    stack = stack + (4096 - (uint)stack % PGSIZE);
+
+  if (clone(start_routine, arg, stack) < 1) {
+    free(stack);
+    return -1;
+  }
   return 0;
 }
 
 int
-thread_join() {
-  return 0;
+thread_join()
+{
+  void *stack;
+  int pid;
+
+  pid = join(&stack);
+  free(stack);
+  return pid;
 }
 
 void
-lock_init(lock_t *mutex) {
+lock_init(lock_t *mutex)
+{
   mutex->flag = 0;
 }
 
 void
-lock_acquire(lock_t *mutex) {
+lock_acquire(lock_t *mutex)
+{
   while(xchg(&mutex->flag, 1) != 0)
     ;
 }
 
 void
-lock_release(lock_t *mutex) {
+lock_release(lock_t *mutex)
+{
   xchg(&mutex->flag, 0);
 }
