@@ -1,14 +1,14 @@
-/* clone and join syscalls */
+/* set up stack correctly (and without extra items) */
 #include "types.h"
 #include "user.h"
 
 #undef NULL
 #define NULL ((void*)0)
 
+int ppid;
 #define PGSIZE (4096)
 
-int ppid;
-int global = 1;
+volatile int global = 1;
 
 #define assert(x) if (x) {} else { \
    printf(1, "%s: %d ", __FILE__, __LINE__); \
@@ -24,33 +24,25 @@ int
 main(int argc, char *argv[])
 {
    ppid = getpid();
-
    void *stack = malloc(PGSIZE*2);
    assert(stack != NULL);
    if((uint)stack % PGSIZE)
      stack = stack + (4096 - (uint)stack % PGSIZE);
 
-   int arg = 42;
-   int clone_pid = clone(worker, &arg, stack);
+   int clone_pid = clone(worker, stack, stack);
    assert(clone_pid > 0);
-
-   void *join_stack;
-   int join_pid = join(&join_stack);
-   assert(join_pid == clone_pid);
-//   printf(1, "%p\n", stack);
-//   printf(1, "%p\n", join_stack);
-   assert(stack == join_stack);
-   assert(global == 2);
-
+   while(global != 5);
    printf(1, "TEST PASSED\n");
    exit();
 }
 
 void
 worker(void *arg_ptr) {
-   int arg = *(int*)arg_ptr;
-   assert(arg == 42);
-   assert(global == 1);
-   global++;
+   printf(1, "%d == %d\n", (uint)&arg_ptr, ((uint)arg_ptr + PGSIZE - 4));
+   printf(1, "%d == %d\n", *((uint*)(arg_ptr+PGSIZE-8)), 0xffffffff);
+
+   assert((uint)&arg_ptr == ((uint)arg_ptr + PGSIZE - 4));
+   assert(*((uint*) (arg_ptr + PGSIZE - 8)) == 0xffffffff);
+   global = 5;
    exit();
 }
