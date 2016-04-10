@@ -110,17 +110,21 @@ int
 thread_create(void (*start_routine)(void*), void *arg)
 {
   void *stack = malloc(PGSIZE*2);
+  int pid;
+
   if (stack == NULL)
     return -1;
 
   if((uint)stack % PGSIZE)
     stack = stack + (4096 - (uint)stack % PGSIZE);
 
-  if (clone(start_routine, arg, stack) < 1) {
+  pid = clone(start_routine, arg, stack);
+  if (pid < 1) {
     free(stack);
     return -1;
   }
-  return 0;
+  
+  return pid;
 }
 
 int
