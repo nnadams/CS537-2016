@@ -106,6 +106,7 @@ userinit(void)
 int
 growproc(int n)
 {
+  struct proc *p;
   uint sz;
 
   sz = proc->sz;
@@ -117,6 +118,16 @@ growproc(int n)
       return -1;
   }
   proc->sz = sz;
+
+  acquire(&ptable.lock);
+  for(p = ptable.proc; p < &ptable.proc[NPROC]; p++) {
+    if(p->parent != proc || !p->thread)
+      continue;
+
+    p->sz = sz;
+  }
+  release(&ptable.lock);
+
   switchuvm(proc);
   return 0;
 }

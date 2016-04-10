@@ -1,14 +1,18 @@
-/* set up stack correctly (and without extra items) */
+/* check that address space size is updated in threads */
 #include "types.h"
 #include "user.h"
 
 #undef NULL
 #define NULL ((void*)0)
 
-int ppid;
 #define PGSIZE (4096)
 
-volatile int global = 1;
+int ppid;
+int global = 0;
+unsigned int size = 0;
+lock_t lock, lock2;
+int num_threads = 30;
+
 
 #define assert(x) if (x) {} else { \
    printf(1, "%s: %d ", __FILE__, __LINE__); \
@@ -24,25 +28,62 @@ int
 main(int argc, char *argv[])
 {
    ppid = getpid();
-   void *stack = malloc(PGSIZE*2);
-   assert(stack != NULL);
-   if((uint)stack % PGSIZE)
-     stack = stack + (4096 - (uint)stack % PGSIZE);
 
-   int clone_pid = clone(worker, stack, stack);
-   assert(clone_pid > 0);
-   while(global != 5);
+   int arg = 101;
+   void *arg_ptr = &arg;
+
+   lock_init(&lock);
+   lock_init(&lock2);
+   lock_acquire(&lock);
+   lock_acquire(&lock2);
+
+   int i;
+   for (i = 0; i < num_threads; i++) {
+      int thread_pid = thread_create(worker, arg_ptr);
+      assert(thread_pid > 0);
+   }
+
+   size = (unsigned int)sbrk(0);
+
+   while (global < num_threads) {
+      lock_release(&lock);
+      sleep(100);
+      lock_acquire(&lock);
+   }
+
+   global = 0;
+   sbrk(10000);
+   size = (unsigned int)sbrk(0);
+   lock_release(&lock);
+
+   while (global < num_threads) {
+      lock_release(&lock2);
+      sleep(100);
+      lock_acquire(&lock2);
+   }
+   lock_release(&lock2);
+
+
+   for (i = 0; i < num_threads; i++) {
+      int join_pid = thread_join();
+      assert(join_pid > 0);
+   }
+
    printf(1, "TEST PASSED\n");
    exit();
 }
 
 void
 worker(void *arg_ptr) {
-   printf(1, "%d == %d\n", (uint)&arg_ptr, ((uint)arg_ptr + PGSIZE - 4));
-   printf(1, "%d == %d\n", *((uint*)(arg_ptr+PGSIZE-8)), 0xffffffff);
+   lock_acquire(&lock);
+   assert((unsigned int)sbrk(0) == size);
+   global++;
+   lock_release(&lock);
 
-   assert((uint)&arg_ptr == ((uint)arg_ptr + PGSIZE - 4));
-   assert(*((uint*) (arg_ptr + PGSIZE - 8)) == 0xffffffff);
-   global = 5;
+   lock_acquire(&lock2);
+   assert((unsigned int)sbrk(0) == size);
+   global++;
+   lock_release(&lock2);
+
    exit();
 }
