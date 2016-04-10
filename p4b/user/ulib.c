@@ -96,10 +96,36 @@ void*
 memmove(void *vdst, void *vsrc, int n)
 {
   char *dst, *src;
-  
+
   dst = vdst;
   src = vsrc;
   while(n-- > 0)
     *dst++ = *src++;
   return vdst;
+}
+
+int
+thread_create(void (*start_routine)(void*), void *arg) {
+  return 0;
+}
+
+int
+thread_join() {
+  return 0;
+}
+
+void
+lock_init(lock_t *mutex) {
+  mutex->flag = 0;
+}
+
+void
+lock_acquire(lock_t *mutex) {
+  while(xchg(&mutex->flag, 1) != 0)
+    ;
+}
+
+void
+lock_release(lock_t *mutex) {
+  xchg(&mutex->flag, 0);
 }
