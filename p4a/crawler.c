@@ -34,21 +34,65 @@ pthread_mutex_t hm = PTHREAD_MUTEX_INITIALIZER;
 pthread_cond_t mcv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mm = PTHREAD_MUTEX_INITIALIZER;
 
+typedef struct __page_t {
+    char *name;
+    char *text;
+} page_t;
+
+typedef char* fetch_fn(char*);
+typedef void edge_fn(char*, char*);
+
 void *fetcher(void *arg) {
+    page_t *newpage;
     char *data;
     while (1) {
-        if (link_queue->size > 0) {
-            data = (char *)ll_pop_front(link_queue);
-            printf("%s fetched!\n", data);
-            ll_insert_front(page_queue, data);
-        }
+        pthread_mutex_lock(&lm);
+        while (link_queue->size == 0)
+            pthread_cond_wait(&lqueue_fill, &lm);
+        data = (char *)ll_pop_front(link_queue);
+        pthread_cond_signal(&lqueue_empty);
+        pthread_mutex_unlock(&lm);
+
+        newpage = malloc(sizeof(page_t));
+        newpage->name = data;
+        data = ((fetch_fn *)arg)(data);
+        newpage->text = data;
+
+        pthread_mutex_lock(&pm);
+        ll_insert_end(page_queue, (void *)newpage);
+        pthread_cond_signal(&pcv);
+        pthread_mutex_unlock(&pm);
     }
 }
 
 void *parser(void *arg) {
+    page_t *page;
+    char *data, *link, *token, *save;
     while (1) {
-        if (page_queue->size > 0) {
-            printf("%s processed!\n", (char *)ll_pop_front(page_queue));
+        pthread_mutex_lock(&pm);
+        while (page_queue->size == 0)
+            pthread_cond_wait(&pcv, &pm);
+        page = (page_t *)ll_pop_front(page_queue);
+        pthread_mutex_unlock(&pm);
+
+        data = page->text;
+        while ((token = strtok_r(data, " \n", &data))) {
+            save = token;
+            token = strtok_r(token, ":", &save);
+            link = strtok_r(NULL, ":", &save);
+
+            if (token == NULL || link == NULL) continue;
+            if (strncmp(token, "link", 5) != 0) continue;
+
+            ((edge_fn *)arg)(page->name, link);
+            if (ht_insert(visited_links, link) == 1) continue;
+
+            pthread_mutex_lock(&lm);
+            while (link_queue->size == link_queue->maxsize)
+                pthread_cond_wait(&lqueue_empty, &lm);
+            ll_insert_end(link_queue, (void *)link);
+            pthread_cond_signal(&lqueue_fill);
+            pthread_mutex_unlock(&lm);
         }
     }
 }
@@ -60,29 +104,30 @@ int crawl(char *start_url,
 	  char * (*fetch_fn)(char *url),
 	  void (*edge_fn)(char *from, char *to)) {
 
-    char *url = strndup(start_url, MAX_LEN+1);
     if (strnlen(start_url, MAX_LEN+1) > MAX_LEN)
         die("Bad start_url\n");
+
+    if (queue_size < 1)
+        die("Bad queue size\n");
+
     if (download_workers < 1 || parse_workers < 1
             || download_workers > MAX_WORKERS
             || parse_workers > MAX_WORKERS)
         die("Bad worker count\n");
-    if (queue_size < 1)
-        die("Bad queue size\n");
 
     link_queue = ll_init(queue_size);
     page_queue = ll_init(0);
-    visited_links = ht_init(queue_size*queue_size);
+    visited_links = ht_init((queue_size+1)*queue_size);
 
-    ll_insert_front(link_queue, url);
+    ll_insert_front(link_queue, start_url);
 
     int i;
     pthread_t fids[MAX_WORKERS], pids[MAX_WORKERS];
 
     for (i = 0; i < download_workers; i++)
-        pthread_create(&fids[i], NULL, (void *) &fetcher, NULL);
+        pthread_create(&fids[i], NULL, (void *) &fetcher, (void *)fetch_fn);
     for (i = 0; i < parse_workers; i++)
-        pthread_create(&pids[i], NULL, (void *) &parser, NULL);
+        pthread_create(&pids[i], NULL, (void *) &parser, (void *)edge_fn);
 
     for (i = 0; i < download_workers; i++)
         pthread_join(fids[i], NULL);

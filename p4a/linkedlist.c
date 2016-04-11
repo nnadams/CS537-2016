@@ -57,7 +57,7 @@ int ll_insert_front(List *list, const void *data) {
 }
 
 int ll_insert_end(List *list, const void *data) {
-    if (list->maxsize == list->size)
+    if (list->maxsize > 0 && list->maxsize == list->size)
         return -1;
 
     ListNode *new = malloc(sizeof(ListNode));
