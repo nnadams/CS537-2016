@@ -33,6 +33,7 @@ pthread_mutex_t hm = PTHREAD_MUTEX_INITIALIZER;
 // Main
 pthread_cond_t mcv = PTHREAD_COND_INITIALIZER;
 pthread_mutex_t mm = PTHREAD_MUTEX_INITIALIZER;
+int work;
 
 typedef struct __page_t {
     char *name;
@@ -67,6 +68,7 @@ void *fetcher(void *arg) {
 
 void *parser(void *arg) {
     page_t *page;
+    int rc;
     char *data, *link, *token, *save;
     while (1) {
         pthread_mutex_lock(&pm);
@@ -85,15 +87,27 @@ void *parser(void *arg) {
             if (strncmp(token, "link", 5) != 0) continue;
 
             ((edge_fn *)arg)(page->name, link);
-            if (ht_insert(visited_links, link) == 1) continue;
+
+            pthread_mutex_lock(&hm);
+            rc = ht_insert(visited_links, link);
+            pthread_mutex_unlock(&hm);
+            if (rc == 1) continue;
 
             pthread_mutex_lock(&lm);
             while (link_queue->size == link_queue->maxsize)
                 pthread_cond_wait(&lqueue_empty, &lm);
             ll_insert_end(link_queue, (void *)link);
+            pthread_mutex_lock(&mm);
+            work++;
+            pthread_mutex_unlock(&mm);
             pthread_cond_signal(&lqueue_fill);
             pthread_mutex_unlock(&lm);
         }
+
+        pthread_mutex_lock(&mm);
+        work--;
+        pthread_mutex_unlock(&mm);
+        if (!work) pthread_cond_signal(&mcv);
     }
 }
 
@@ -120,6 +134,8 @@ int crawl(char *start_url,
     visited_links = ht_init((queue_size+1)*queue_size);
 
     ll_insert_front(link_queue, start_url);
+    ht_insert(visited_links, start_url);
+    work = 1;
 
     int i;
     pthread_t fids[MAX_WORKERS], pids[MAX_WORKERS];
@@ -129,10 +145,13 @@ int crawl(char *start_url,
     for (i = 0; i < parse_workers; i++)
         pthread_create(&pids[i], NULL, (void *) &parser, (void *)edge_fn);
 
-    for (i = 0; i < download_workers; i++)
+    while (work)
+        pthread_cond_wait(&mcv, &mm);
+
+    /*for (i = 0; i < download_workers; i++)
         pthread_join(fids[i], NULL);
     for (i = 0; i < parse_workers; i++)
-        pthread_join(pids[i], NULL);
+        pthread_join(pids[i], NULL);*/
 
     return 0;
 }

@@ -72,7 +72,8 @@ int ll_insert_end(List *list, const void *data) {
         new->next = NULL;
     }
     else {
-        new->next = list->tail;
+        list->tail->next = new;
+        new->next = NULL;
         list->tail = new;
     }
 
