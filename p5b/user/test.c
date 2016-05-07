@@ -1,51 +1,70 @@
-#include "fcntl.h"
 #include "types.h"
 #include "stat.h"
 #include "user.h"
-
-char buf[512];
-int n;
+#include "fcntl.h"
+#include "fs.h"
 
 void
-cat(int fd)
+test_failed()
 {
-  while((n = read(fd, buf, sizeof(buf))) > 0)
-    write(1, buf, n);
-  if(n < 0){
-    printf(1, "cat: read error\n");
-    exit();
-  }
+	printf(1, "TEST FAILED\n");
+	exit();
 }
+
+void
+test_passed()
+{
+ printf(1, "TEST PASSED\n");
+ exit();
+}
+
+#define MAX 25
 
 int
 main(int argc, char *argv[])
 {
-  int fd2;
-  char buff = 'a';
-
-  int fd = open("sm.txt", O_CREATE | O_SMALLFILE | O_RDWR);
-  printf(1, "Creating small file (%d)... ", fd);
-  printf(1, "%d\n", write(fd, &buff, 1));
-  close(fd);
-
-  fd = open("sm.txt", NULL);
-  printf(1, "*** FILE DATA START***\n");
-  cat(fd);
-  printf(1, "*** FILE DATA END***\n");
-  close(fd);
-
-  fd = open("sm.txt",O_SMALLFILE | O_WRONLY);
-  fd2 = open("README", NULL);
-  while((n = read(fd2, buf, sizeof(buf))) > 0)
-    write(fd, buf, n);
-  if(n < 0){
-    printf(1, "cat: read error\n");
+  int fd;
+  char buf[MAX];
+  char buf2[MAX];
+  int n;
+  int i;
+  
+  for(i = 0; i < MAX; i++){
+    buf[i] = (char)(i+(int)'0');
+  }
+  
+  if((fd = open("test_file.txt", O_CREATE | O_SMALLFILE | O_RDWR)) < 0){
+    printf(1, "Failed to create the small file\n");
+    test_failed();
     exit();
   }
+  
+  if((n = write(fd, buf, MAX)) != MAX){
+    printf(1, "Write failed!\n");
+    test_failed();
+  }
+  printf(1, "bytes written = %d\n", n);
   close(fd);
-  close(fd2);
+  
+  if((fd = open("test_file.txt", O_CREATE | O_SMALLFILE | O_RDWR)) < 0){
+    printf(1, "Failed to open the small file\n");
+    test_failed();
+  }
+  
+  if((n = read(fd, buf2, MAX*2)) != MAX){
+    printf(1, "Read failed!\n");
+    test_failed();
+  }
+  printf(1, "bytes read = %d\n", n);
+  close(fd);
 
-  fd = open("sm.txt", O_SMALLFILE);
-  cat(fd);
-  exit();
+  for(i = 0; i < MAX; i++){
+    if(buf[i] != buf2[i]){
+      printf(1, "Data mismatch.\n");
+      test_failed();
+    }
+  }
+  
+  test_passed();
+	exit();
 }

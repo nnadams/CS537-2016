@@ -465,7 +465,7 @@ writei(struct inode *ip, char *src, uint off, uint n)
   }
 
   // p5b start here
-  cprintf("writei(%d, %s, %d, %d)\n", (uint)ip, src, (int)off, (int)n);
+  //cprintf("writei(%d, %s, %d, %d)\n", (uint)ip, src, (int)off, (int)n);
   if (ip->type == T_SMALLFILE) {
     if (off > MAXSMFILE || off > ip->size || off + n < off)
       return -1;
