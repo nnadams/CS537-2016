@@ -49,7 +49,7 @@ sys_dup(void)
 {
   struct file *f;
   int fd;
-  
+
   if(argfd(0, 0, &f) < 0)
     return -1;
   if((fd=fdalloc(f)) < 0)
@@ -87,7 +87,7 @@ sys_close(void)
 {
   int fd;
   struct file *f;
-  
+
   if(argfd(0, &fd, &f) < 0)
     return -1;
   proc->ofile[fd] = 0;
@@ -100,7 +100,7 @@ sys_fstat(void)
 {
   struct file *f;
   struct stat *st;
-  
+
   if(argfd(0, 0, &f) < 0 || argptr(1, (void*)&st, sizeof(*st)) < 0)
     return -1;
   return filestat(f, st);
@@ -237,6 +237,8 @@ create(char *path, short type, short major, short minor)
   ip->major = major;
   ip->minor = minor;
   ip->nlink = 1;
+  if (ip->type == T_SMALLFILE)
+    memset(ip->addrs, 0, MAXSMFILE);
   iupdate(ip);
 
   if(type == T_DIR){  // Create . and .. entries.
@@ -259,13 +261,16 @@ sys_open(void)
 {
   char *path;
   int fd, omode;
+  short type = T_FILE;
   struct file *f;
   struct inode *ip;
 
   if(argstr(0, &path) < 0 || argint(1, &omode) < 0)
     return -1;
   if(omode & O_CREATE){
-    if((ip = create(path, T_FILE, 0, 0)) == 0)
+    if (omode & O_SMALLFILE)
+      type = T_SMALLFILE;
+    if((ip = create(path, type, 0, 0)) == 0)
       return -1;
   } else {
     if((ip = namei(path)) == 0)
@@ -312,7 +317,7 @@ sys_mknod(void)
   char *path;
   int len;
   int major, minor;
-  
+
   if((len=argstr(0, &path)) < 0 ||
      argint(1, &major) < 0 ||
      argint(2, &minor) < 0 ||

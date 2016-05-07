@@ -6,7 +6,7 @@
 //
 // Disk layout is: superblock, inodes, block in-use bitmap, data blocks.
 //
-// This file contains the low-level file system manipulation 
+// This file contains the low-level file system manipulation
 // routines.  The (higher-level) system call implementations
 // are in sysfile.c.
 
@@ -29,7 +29,7 @@ static void
 readsb(int dev, struct superblock *sb)
 {
   struct buf *bp;
-  
+
   bp = bread(dev, 1);
   memmove(sb, bp->data, sizeof(*sb));
   brelse(bp);
@@ -40,14 +40,14 @@ static void
 bzero(int dev, int bno)
 {
   struct buf *bp;
-  
+
   bp = bread(dev, bno);
   memset(bp->data, 0, BSIZE);
   bwrite(bp);
   brelse(bp);
 }
 
-// Blocks. 
+// Blocks.
 
 // Allocate a disk block.
 static uint
@@ -56,18 +56,18 @@ balloc(uint dev)
   int b, bi, m, bound;
   struct buf *bp;
   struct superblock sb;
-  
+
   bp = 0;
   readsb(dev, &sb);
   for(b = 0; b < sb.size; b += BPB){
     bp = bread(dev, BBLOCK(b, sb.ninodes));
-    
+
     if(b+BPB > sb.size){ //last bitmap block
       bound = sb.size % BPB;
     } else {
       bound = BPB;
     }
-    
+
     for(bi = 0; bi < bound; bi++){
       m = 1 << (bi % 8);
       if((bp->data[bi/8] & m) == 0){  // Is block free?
@@ -79,7 +79,7 @@ balloc(uint dev)
     }
     brelse(bp);
   }
-  
+
   //panic("balloc: out of blocks");
   return 0;
 }
@@ -116,7 +116,7 @@ bfree(int dev, uint b)
 // the superblock.  The kernel keeps a cache of the in-use
 // on-disk structures to provide a place for synchronizing access
 // to inodes shared between multiple processes.
-// 
+//
 // ip->ref counts the number of pointer references to this cached
 // inode; references are typically kept in struct file and in proc->cwd.
 // When ip->ref falls to zero, the inode is no longer cached.
@@ -125,15 +125,15 @@ bfree(int dev, uint b)
 // Processes are only allowed to read and write inode
 // metadata and contents when holding the inode's lock,
 // represented by the I_BUSY flag in the in-memory copy.
-// Because inode locks are held during disk accesses, 
+// Because inode locks are held during disk accesses,
 // they are implemented using a flag rather than with
 // spin locks.  Callers are responsible for locking
 // inodes before passing them to routines in this file; leaving
 // this responsibility with the caller makes it possible for them
 // to create arbitrarily-sized atomic operations.
 //
-// To give maximum control over locking to the callers, 
-// the routines in this file that return inode pointers 
+// To give maximum control over locking to the callers,
+// the routines in this file that return inode pointers
 // return pointers to *unlocked* inodes.  It is the callers'
 // responsibility to lock them before using them.  A non-zero
 // ip->ref keeps these unlocked inodes in the cache.
@@ -320,7 +320,7 @@ iunlockput(struct inode *ip)
 //
 // The contents (data) associated with each inode is stored
 // in a sequence of blocks on the disk.  The first NDIRECT blocks
-// are listed in ip->addrs[].  The next NINDIRECT blocks are 
+// are listed in ip->addrs[].  The next NINDIRECT blocks are
 // listed in the block ip->addrs[NDIRECT].
 
 // Return the disk block address of the nth block in inode ip.
@@ -330,6 +330,8 @@ bmap(struct inode *ip, uint bn)
 {
   uint addr, *a;
   struct buf *bp;
+
+  //if (ip->type == T_SMALLFILE) return NULL;
 
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
@@ -371,7 +373,7 @@ itrunc(struct inode *ip)
       ip->addrs[i] = 0;
     }
   }
-  
+
   if(ip->addrs[NDIRECT]){
     bp = bread(ip->dev, ip->addrs[NDIRECT]);
     a = (uint*)bp->data;
@@ -405,6 +407,7 @@ readi(struct inode *ip, char *dst, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
+  //int i;
 
   if(ip->type == T_DEV){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].read)
@@ -412,22 +415,38 @@ readi(struct inode *ip, char *dst, uint off, uint n)
     return devsw[ip->major].read(ip, dst, n);
   }
 
-  if(off > ip->size || off + n < off)
-    return -1;
-  if(off + n > ip->size)
-    n = ip->size - off;
+  if (ip->type == T_SMALLFILE) {
+    if (off > MAXSMFILE || off > ip->size || off + n < off)
+      return -1;
+    if(off + n > ip->size)
+      n = ip->size - off;
 
-  for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
-    uint sector_number = bmap(ip, off/BSIZE);
-    if(sector_number == 0){ //failed to find block
-      panic("readi: trying to read a block that was never allocated");
+    /*for (i=0; i<MAXSMFILE-1; i++) {
+      if (ip->addrs[i] > 0x20) cprintf("%c ", (char)ip->addrs[i]);
+      else cprintf("%d ", ip->addrs[i]);
     }
-    
-    bp = bread(ip->dev, sector_number);
-    m = min(n - tot, BSIZE - off%BSIZE);
-    memmove(dst, bp->data + off%BSIZE, m);
-    brelse(bp);
+    cprintf("\n %d  %d", off, n);*/
+    memmove(dst, ip->addrs + off, n);
   }
+  else {
+    if(off > ip->size || off + n < off)
+      return -1;
+    if(off + n > ip->size)
+      n = ip->size - off;
+
+    for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
+      uint sector_number = bmap(ip, off/BSIZE);
+      if(sector_number == 0){ //failed to find block
+        panic("readi: trying to read a block that was never allocated");
+      }
+
+      bp = bread(ip->dev, sector_number);
+      m = min(n - tot, BSIZE - off%BSIZE);
+      memmove(dst, bp->data + off%BSIZE, m);
+      brelse(bp);
+    }
+  }
+
   return n;
 }
 
@@ -437,6 +456,7 @@ writei(struct inode *ip, char *src, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
+  //int i;
 
   if(ip->type == T_DEV){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].write)
@@ -444,28 +464,52 @@ writei(struct inode *ip, char *src, uint off, uint n)
     return devsw[ip->major].write(ip, src, n);
   }
 
-  if(off > ip->size || off + n < off)
-    return -1;
-  if(off + n > MAXFILE*BSIZE)
-    n = MAXFILE*BSIZE - off;
+  // p5b start here
+  cprintf("writei(%d, %s, %d, %d)\n", (uint)ip, src, (int)off, (int)n);
+  if (ip->type == T_SMALLFILE) {
+    if (off > MAXSMFILE || off > ip->size || off + n < off)
+      return -1;
 
-  for(tot=0; tot<n; tot+=m, off+=m, src+=m){
-    uint sector_number = bmap(ip, off/BSIZE);
-    if(sector_number == 0){ //failed to find block
-      n = tot; //return number of bytes written so far
-      break;
+    if(off + n > MAXSMFILE)
+      n = MAXSMFILE - off;
+
+    memmove(ip->addrs + off, src, n);
+    /*for (i=0; i<MAXSMFILE-1; i++) {
+      if (ip->addrs[i] > 0x20) cprintf("%c ", (char)ip->addrs[i]);
+      else cprintf("%d ", ip->addrs[i]);
     }
-    
-    bp = bread(ip->dev, sector_number);
-    m = min(n - tot, BSIZE - off%BSIZE);
-    memmove(bp->data + off%BSIZE, src, m);
-    bwrite(bp);
-    brelse(bp);
-  }
+    cprintf("\n");*/
 
-  if(n > 0 && off > ip->size){
+    off += n;
+    if (off > MAXSMFILE) off = MAXSMFILE;
     ip->size = off;
-    iupdate(ip);
+
+    iupdate(ip);  // Call this if you change the inode
+  }
+  else {
+    if(off > ip->size || off + n < off)
+      return -1;
+    if(off + n > MAXFILE*BSIZE)
+      n = MAXFILE*BSIZE - off;
+
+    for(tot=0; tot<n; tot+=m, off+=m, src+=m){
+      uint sector_number = bmap(ip, off/BSIZE);
+      if(sector_number == 0){ //failed to find block
+        n = tot; //return number of bytes written so far
+        break;
+      }
+
+      bp = bread(ip->dev, sector_number);
+      m = min(n - tot, BSIZE - off%BSIZE);
+      memmove(bp->data + off%BSIZE, src, m);
+      bwrite(bp);
+      brelse(bp);
+    }
+
+    if(n > 0 && off > ip->size){
+      ip->size = off;
+      iupdate(ip);  // Call this if you change the inode
+    }
   }
   return n;
 }
@@ -538,7 +582,7 @@ dirlink(struct inode *dp, char *name, uint inum)
   de.inum = inum;
   if(writei(dp, (char*)&de, off, sizeof(de)) != sizeof(de))
     panic("dirlink");
-  
+
   return 0;
 }
 
