@@ -24,68 +24,42 @@ test_passed()
 int
 main(int argc, char *argv[])
 {
-  int fd, i;
+  int fd, pid, i;
+  
+  char *filename = "test_file.txt";
   char buf[SIZE];
-  char buf2[SIZE];
-  char tmp;
-  struct stat st;
-
-  printf(1, "Buffer is: ");
-  for(i = 0; i < SIZE; i++){
-    buf[i] = (char)(i+(int)'0');
-	printf(1, "%c", buf[i]);
+  
+  uint *sector = (uint *)&buf;
+  for(i = 0; i < NBLOCKS; i++, sector++){
+    *sector = i;
   }
-  printf(1, "\n");
-  memset(buf2, 0, SIZE);
-
-  //open, write 1 byte to the end, close
-  for(i = 0; i < SIZE+5; i++){
-    if((fd = open("test_file.txt", O_CREATE | O_SMALLFILE | O_RDWR)) < 0){
-      printf(1, "Failed to create the small file\n");
-      test_failed();
-    }
-
-    while(read(fd, &tmp, 1) == 1) { } //go to end of file
-
-    if(write(fd, &buf[i], 1) != 1){
-      break;
-    }
-    close(fd);
-  }
-
-  //read
-  if((fd = open("test_file.txt", O_CREATE | O_SMALLFILE | O_RDWR)) < 0){
-    printf(1, "Failed to open the small file\n");
+  
+  if((fd = open(filename, O_CREATE | O_SMALLFILE | O_RDWR)) < 0){
+    printf(1, "Failed to create a small file\n");
     test_failed();
   }
-
-  if(fstat(fd, &st) < 0){
-    printf(1, "Failed to get stat on the small file\n");
-    test_failed();
-  }
-
-  if(st.size != SIZE){
-    printf(1, "Invalid file size.\n");
-    test_failed();
-  }
-
-  if(read(fd, buf2, SIZE) != SIZE){
-    printf(1, "Read failed!\n");
+  
+  if(write(fd, buf, SIZE) != SIZE){
+    printf(1, "Failed to write to small file\n");
     test_failed();
   }
   close(fd);
-
-  for(i = 0; i < SIZE; i++){
-    if(buf[i] != buf2[i]){
-	  printf(1, "%d: %c!=%c \n", i, buf[i], buf2[i]);
-      printf(1, "Data mismatch.\n");
-      test_failed();
-    }
-	else {
-	  printf(1, "%d: %c=%c \n", i, buf[i], buf2[i]);
-	}
+  
+  pid = fork();
+  if(pid < 0){
+    printf(1, "Fork failed\n");
+    test_failed();
   }
-
+  else if(pid == 0) {
+    char *args[3] = {"rm", filename, 0};
+    exec(args[0], args);
+    printf(1, "exec failed!\n");
+    test_failed();
+  }
+  else {
+    wait();
+  }
+  
   test_passed();
-	exit();
+  exit();
 }
