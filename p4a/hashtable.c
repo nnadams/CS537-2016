@@ -21,13 +21,13 @@ static uint32_t fletcher32(char const *data, size_t words) {
     return sum2 << 16 | sum1;
 }
 
-HashTable *ht_init(int size) {
-    HashTable *new;
+hashtable_t *ht_init(int size) {
+    hashtable_t *new;
     int i;
 
     if (size < 1) return NULL;
-    if ((new = malloc(sizeof(HashTable))) == NULL) return NULL;
-    if ((new->table = malloc(sizeof(List*) * size)) == NULL) return NULL;
+    if ((new = malloc(sizeof(hashtable_t))) == NULL) return NULL;
+    if ((new->table = malloc(sizeof(list_t*) * size)) == NULL) return NULL;
 
     for(i = 0; i < size; i++)
         new->table[i] = ll_init(0);
@@ -36,7 +36,7 @@ HashTable *ht_init(int size) {
     return new;
 }
 
-void ht_destory(HashTable *ht) {
+void ht_destory(hashtable_t *ht) {
     int i;
 
     if (ht == NULL) return;
@@ -48,7 +48,7 @@ void ht_destory(HashTable *ht) {
     free(ht);
 }
 
-char *ht_lookup(HashTable const *ht, char const *str) {
+char *ht_lookup(hashtable_t const *ht, char const *str) {
     int len = strnlen(str, 1024);
     if (len > 1023) return NULL;
     if (ht == NULL) return NULL;
@@ -56,7 +56,7 @@ char *ht_lookup(HashTable const *ht, char const *str) {
     uint32_t val = fletcher32(str, len);
     val = val % ht->size;
 
-    ListNode *cur = ht->table[val]->head;
+    list_node_t *cur = ht->table[val]->head;
     for (; cur != NULL; cur = cur->next) {
         if (strncmp(str, (char *)cur->data, len) == 0)
             return (char *)cur->data;
@@ -65,7 +65,7 @@ char *ht_lookup(HashTable const *ht, char const *str) {
     return NULL;
 }
 
-int ht_insert(HashTable *ht, char const *str) {
+int ht_insert(hashtable_t *ht, char const *str) {
     int len = strnlen(str, 1024);
     if (len > 1023) return -1;
     if (ht == NULL) return -1;

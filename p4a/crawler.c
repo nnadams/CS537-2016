@@ -148,6 +148,7 @@ int crawl(char *start_url,
     while (work)
         pthread_cond_wait(&mcv, &mm);
 
+    // Clean up
     /*for (i = 0; i < download_workers; i++)
         pthread_join(fids[i], NULL);
     for (i = 0; i < parse_workers; i++)

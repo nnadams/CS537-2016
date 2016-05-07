@@ -1,8 +1,8 @@
 #include <stdlib.h>
 #include "linkedlist.h"
 
-List *ll_init(int size) {
-    List *new = malloc(sizeof(List));
+list_t *ll_init(int size) {
+    list_t *new = malloc(sizeof(list_t));
     if (new == NULL)
         return NULL;
 
@@ -18,9 +18,9 @@ List *ll_init(int size) {
     return new;
 }
 
-void ll_destory(List *list) {
-    ListNode *cur = list->head;
-    ListNode *tmp;
+void ll_destory(list_t *list) {
+    list_node_t *cur = list->head;
+    list_node_t *tmp;
 
     while(cur != NULL) {
         tmp = cur->next;
@@ -32,11 +32,11 @@ void ll_destory(List *list) {
     free(list);
 }
 
-int ll_insert_front(List *list, const void *data) {
+int ll_insert_front(list_t *list, const void *data) {
     if (list->maxsize > 0 && list->maxsize == list->size)
         return -1;
 
-    ListNode *new = malloc(sizeof(ListNode));
+    list_node_t *new = malloc(sizeof(list_node_t));
     if (new == NULL)
         return -1;
 
@@ -56,11 +56,11 @@ int ll_insert_front(List *list, const void *data) {
     return 0;
 }
 
-int ll_insert_end(List *list, const void *data) {
+int ll_insert_end(list_t *list, const void *data) {
     if (list->maxsize > 0 && list->maxsize == list->size)
         return -1;
 
-    ListNode *new = malloc(sizeof(ListNode));
+    list_node_t *new = malloc(sizeof(list_node_t));
     if (new == NULL)
         return -1;
 
@@ -81,7 +81,7 @@ int ll_insert_end(List *list, const void *data) {
     return 0;
 }
 
-void *ll_pop_front(List *list) {
+void *ll_pop_front(list_t *list) {
     if (list->size == 0)
         return NULL;
 

@@ -8,12 +8,12 @@
 
 typedef struct __HashTable {
     int size;
-    List **table;
-} HashTable;
+    list_t **table;
+} hashtable_t;
 
-HashTable *ht_init(int);
-void ht_destory(HashTable *);
-char *ht_lookup(HashTable const *, char const *);
-int ht_insert(HashTable *, char const *);
+hashtable_t *ht_init(int);
+void ht_destory(hashtable_t *);
+char *ht_lookup(hashtable_t const *, char const *);
+int ht_insert(hashtable_t *, char const *);
 
 #endif
