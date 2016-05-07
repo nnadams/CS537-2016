@@ -18,53 +18,74 @@ test_passed()
  exit();
 }
 
-#define MAX 25
+#define NBLOCKS (NDIRECT+1)
+#define SIZE NBLOCKS*4
 
 int
 main(int argc, char *argv[])
 {
-  int fd;
-  char buf[MAX];
-  char buf2[MAX];
-  int n;
-  int i;
-  
-  for(i = 0; i < MAX; i++){
+  int fd, i;
+  char buf[SIZE];
+  char buf2[SIZE];
+  char tmp;
+  struct stat st;
+
+  printf(1, "Buffer is: ");
+  for(i = 0; i < SIZE; i++){
     buf[i] = (char)(i+(int)'0');
+	printf(1, "%c", buf[i]);
   }
-  
-  if((fd = open("test_file.txt", O_CREATE | O_SMALLFILE | O_RDWR)) < 0){
-    printf(1, "Failed to create the small file\n");
-    test_failed();
-    exit();
+  printf(1, "\n");
+  memset(buf2, 0, SIZE);
+
+  //open, write 1 byte to the end, close
+  for(i = 0; i < SIZE+5; i++){
+    if((fd = open("test_file.txt", O_CREATE | O_SMALLFILE | O_RDWR)) < 0){
+      printf(1, "Failed to create the small file\n");
+      test_failed();
+    }
+
+    while(read(fd, &tmp, 1) == 1) { } //go to end of file
+
+    if(write(fd, &buf[i], 1) != 1){
+      break;
+    }
+    close(fd);
   }
-  
-  if((n = write(fd, buf, MAX)) != MAX){
-    printf(1, "Write failed!\n");
-    test_failed();
-  }
-  printf(1, "bytes written = %d\n", n);
-  close(fd);
-  
+
+  //read
   if((fd = open("test_file.txt", O_CREATE | O_SMALLFILE | O_RDWR)) < 0){
     printf(1, "Failed to open the small file\n");
     test_failed();
   }
-  
-  if((n = read(fd, buf2, MAX*2)) != MAX){
+
+  if(fstat(fd, &st) < 0){
+    printf(1, "Failed to get stat on the small file\n");
+    test_failed();
+  }
+
+  if(st.size != SIZE){
+    printf(1, "Invalid file size.\n");
+    test_failed();
+  }
+
+  if(read(fd, buf2, SIZE) != SIZE){
     printf(1, "Read failed!\n");
     test_failed();
   }
-  printf(1, "bytes read = %d\n", n);
   close(fd);
 
-  for(i = 0; i < MAX; i++){
+  for(i = 0; i < SIZE; i++){
     if(buf[i] != buf2[i]){
+	  printf(1, "%d: %c!=%c \n", i, buf[i], buf2[i]);
       printf(1, "Data mismatch.\n");
       test_failed();
     }
+	else {
+	  printf(1, "%d: %c=%c \n", i, buf[i], buf2[i]);
+	}
   }
-  
+
   test_passed();
 	exit();
 }
