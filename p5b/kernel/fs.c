@@ -413,7 +413,7 @@ readi(struct inode *ip, char *dst, uint off, uint n)
   uint tot, m;
   struct buf *bp;
   int i;
-  uint *ptr;
+  char *ptr;
 
   if(ip->type == T_DEV){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].read)
@@ -427,27 +427,27 @@ readi(struct inode *ip, char *dst, uint off, uint n)
     if(off + n > ip->size)
       n = ip->size - off;
 
-    cprintf("** DEBUG R **\n");
+    /*cprintf("** DEBUG R **\n");
     for (i=0; i<MAXSMFILE; i++) {
       if (ip->addrs[i] > 0x20) cprintf("%c ", (char)ip->addrs[i]);
       else cprintf("%d ", ip->addrs[i]);
     }
     cprintf("\n%d  %d", off, n);
-    cprintf("** END DEBUG **\n");
+    cprintf("** END DEBUG **\n");*/
 
-    ptr = ip->addrs + off;
+    ptr = (char *)ip->addrs + off;
     for (i=0; i<n; i++) {
-      dst[i] = (char)ptr[i];
+      dst[i] = ptr[i];
     }
     //memmove(dst, ip->addrs + off, n);
 
-    cprintf("** DEBUG R2 **\n");
+    /*cprintf("** DEBUG R2 **\n");
     for (i=0; i<n; i++) {
       if (dst[i] > 0x20) cprintf("%c ", (char)dst[i]);
       else cprintf("~ ");
     }
     cprintf("\n%d  %d", off, n);
-    cprintf("** END DEBUG **\n");
+    cprintf("** END DEBUG **\n");*/
   }
   else {
     if(off > ip->size || off + n < off)
@@ -477,7 +477,8 @@ writei(struct inode *ip, char *src, uint off, uint n)
 {
   uint tot, m;
   struct buf *bp;
-  //int i;
+  int i;
+  char *ptr;
 
   if(ip->type == T_DEV){
     if(ip->major < 0 || ip->major >= NDEV || !devsw[ip->major].write)
@@ -494,7 +495,12 @@ writei(struct inode *ip, char *src, uint off, uint n)
     if(off + n > MAXSMFILE)
       n = MAXSMFILE - off;
 
-    memmove(ip->addrs + off, src, n);
+    ptr = (char *)ip->addrs + off;
+    for (i=0; i<n; i++) {
+      ptr[i] = src[i];
+    }
+
+    //memmove(ip->addrs + off, src, n);
     /*cprintf("** DEBUG W **\n");
     for (i=0; i<MAXSMFILE-1; i++) {
       if (ip->addrs[i] > 0x20) cprintf("%c ", (char)ip->addrs[i]);
