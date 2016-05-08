@@ -53,7 +53,7 @@ OBJDUMP := objdump
 ################################################################################
 
 # If the makefile can't find QEMU, specify its path here
-#QEMU :=
+QEMU := `which qemu-system-i386`
 
 # Try to infer the correct QEMU if not specified
 ifndef QEMU
@@ -80,10 +80,10 @@ QEMUGDB := $(shell if $(QEMU) -help | grep -q '^-gdb'; \
 
 # number of CPUs to emulate in QEMU
 ifndef CPUS
-CPUS := 1
+CPUS := 2
 endif
 
-QEMUOPTS := -hdb fs.img xv6.img -smp $(CPUS)
+QEMUOPTS := -drive file=xv6.img,index=0,media=disk,format=raw -drive file=fs.img,index=1,media=disk,format=raw -smp $(CPUS)
 
 ################################################################################
 # Main Targets

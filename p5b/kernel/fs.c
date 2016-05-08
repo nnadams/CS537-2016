@@ -427,27 +427,10 @@ readi(struct inode *ip, char *dst, uint off, uint n)
     if(off + n > ip->size)
       n = ip->size - off;
 
-    /*cprintf("** DEBUG R **\n");
-    for (i=0; i<MAXSMFILE; i++) {
-      if (ip->addrs[i] > 0x20) cprintf("%c ", (char)ip->addrs[i]);
-      else cprintf("%d ", ip->addrs[i]);
-    }
-    cprintf("\n%d  %d", off, n);
-    cprintf("** END DEBUG **\n");*/
-
     ptr = (char *)ip->addrs + off;
     for (i=0; i<n; i++) {
       dst[i] = ptr[i];
     }
-    //memmove(dst, ip->addrs + off, n);
-
-    /*cprintf("** DEBUG R2 **\n");
-    for (i=0; i<n; i++) {
-      if (dst[i] > 0x20) cprintf("%c ", (char)dst[i]);
-      else cprintf("~ ");
-    }
-    cprintf("\n%d  %d", off, n);
-    cprintf("** END DEBUG **\n");*/
   }
   else {
     if(off > ip->size || off + n < off)
@@ -487,7 +470,6 @@ writei(struct inode *ip, char *src, uint off, uint n)
   }
 
   // p5b start here
-  //cprintf("writei(%d, %s, %d, %d)\n", (uint)ip, src, (int)off, (int)n);
   if (ip->type == T_SMALLFILE) {
     if (off > MAXSMFILE || off > ip->size || off + n < off)
       return -1;
@@ -499,15 +481,7 @@ writei(struct inode *ip, char *src, uint off, uint n)
     for (i=0; i<n; i++) {
       ptr[i] = src[i];
     }
-
-    //memmove(ip->addrs + off, src, n);
-    /*cprintf("** DEBUG W **\n");
-    for (i=0; i<MAXSMFILE-1; i++) {
-      if (ip->addrs[i] > 0x20) cprintf("%c ", (char)ip->addrs[i]);
-      else cprintf("%d ", ip->addrs[i]);
-    }
-    cprintf("** END DEBUG **\n");*/
-
+    
     off += n;
     if (off > MAXSMFILE) off = MAXSMFILE;
     ip->size = off;
