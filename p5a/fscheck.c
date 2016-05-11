@@ -78,7 +78,7 @@ int main(int argc, char **argv) {
 
     fd = open(argv[1], 0);
     if (fd < 0)
-        die("image not found\n");
+        die("image not found.\n");
 
     rc = fstat(fd, &sbuf);
     assert(rc == 0);
@@ -92,11 +92,11 @@ int main(int argc, char **argv) {
     dinode *dip = (dinode *)(img + 2*BSIZE);
     for (i = 0; i < sb->ninodes; i++) {
         if (i == 1 && dip->type != T_DIR)
-            die("root directory does not exist\n");
+            die("ERROR: root directory does not exist.\n");
 
         if (dip->type != T_INVALID) {
             if (dip->type > 3 || dip->type < 0)
-                die("bad inode\n");
+                die("ERROR: bad inode.\n");
 
             DEBUG_PRINT("%d type: %d\n", i, dip->type);
 
@@ -104,28 +104,28 @@ int main(int argc, char **argv) {
 
             for (j = 0; j < NDIRECT; j++) {
                 if (dip->addrs[j] >= sb->size)
-                    die("bad address in inode\n");
+                    die("ERROR: bad address in inode.\n");
 
                 valid = isDataBlockValid(dip->addrs[j]);
                 if (!valid)
-                    die("address used by inode but marked free in bitmap\n");
+                    die("ERROR: address used by inode but marked free in bitmap.\n");
 
                 DEBUG_PRINT("%d DPTR(%d) -> %d (%d)\n", i, j, dip->addrs[j], valid);
             }
 
             if (dip->addrs[j] >= sb->size) {
-                die("bad address in inode\n");
+                die("ERROR: bad address in inode.\n");
             }
             else if (dip->addrs[j] != 0) {
                 DEBUG_PRINT("%d IPTR -> %d\n", i, dip->addrs[j]);
                 addr = img + (((dip->addrs[j]) * BSIZE));
                 for (j = 0; j < BSIZE/4; j++) {
                     if (addr[j] >= sb->size)
-                        die("bad address in inode\n");
+                        die("ERROR: bad address in inode.\n");
 
                     valid = isDataBlockValid(addr[j]);
                     if (!valid)
-                        die("address used by inode but marked free in bitmap\n");
+                        die("ERROR: address used by inode but marked free in bitmap.\n");
 
                     DEBUG_PRINT("%d  DPTR(%d) -> %d (%d)\n", i, j+12, addr[j], valid);
                 }
