@@ -254,7 +254,10 @@ int main(int argc, char **argv) {
                             int n;
                             for (n = 0; n < sb->ninodes; n++) {
                                 if (n == ent->inum) {
-                                    if (tmp->type < 1 || tmp->type > 3) {
+                                    if (tmp->type < 0 || tmp->type > 3) {
+                                        die("ERROR: bad inode.\n");
+                                    }
+                                    else if (tmp->type == 0) {
                                         die("ERROR: inode referred to in directory but marked free.\n");
                                     }
                                     else {
