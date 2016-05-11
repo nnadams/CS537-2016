@@ -160,6 +160,30 @@ void chkBlockOnlyOnce(uint block) {
     }
 }
 
+void chkCorrectLinkCount(uint inode, uint nlink) {
+    uint links = 0, i, j;
+    dirent *ent;
+    dinode *dip = (dinode *)(img + 2*BSIZE);
+    for (i = 0; i < sb->ninodes; i++) {
+        if (dip->type == T_DIR) {
+            for (j = 0; j < NDIRECT; j++) {
+                ent = img + (((dip->addrs[j]) * BSIZE));
+
+                while (ent->inum != 0) {
+                    if (ent->inum == inode) {
+                        links++;
+                    }
+                    ent++;
+                }
+            }
+        }
+        dip++;
+    }
+
+    if (links != nlink)
+        die("ERROR: bad reference count for file.\n");
+}
+
 int main(int argc, char **argv) {
     int i, j, k, rc, fd;
     short valid = 0;
@@ -230,6 +254,10 @@ int main(int argc, char **argv) {
                 }
             }
 
+            if (dip->type == T_FILE) {
+                chkCorrectLinkCount(i, dip->nlink);
+            }
+
             if (dip->type == T_DIR) {
                 chkDirOnlyOnce(i);
 
@@ -294,14 +322,12 @@ int main(int argc, char **argv) {
         dip++;
     }
 
-    //chkBlocksActuallyUsed
     uint *v;
     i = BBLOCK(sb->nblocks - 1, sb->ninodes) + 1;
     for (; i < sb->nblocks; i++) {
         v = img + (BBLOCK(i, sb->ninodes) * BSIZE);
         v += i / 32;
         if ((((*v) >> (i % 32)) & 1) == 1) {
-            //DEBUG_PRINT("\nChk %d", i);
             dinode *dip = (dinode *)(img + 2*BSIZE);
             for (j = 0; j < sb->ninodes; j++) {
                 for (k = 0; k < NDIRECT; k++) {
