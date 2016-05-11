@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 # define DEBUG_PRINT(x, ...) printf(x, ##__VA_ARGS__)
 #else
@@ -61,10 +61,91 @@ typedef struct _dirent {
 void *img;
 superblock *sb;
 
+const char dot[] = ".";
+const char dotdot[] = "..";
+
 static inline short isDataBlockValid(uint block) {
     uint *valid = img + (BBLOCK(block, sb->ninodes) * BSIZE);
     valid += block / 32;
     return ((*valid) >> (block % 32)) & 1;
+}
+
+void chkParentDir(uint inode, uint parent) {
+    short i, j;
+    dirent *ent;
+    dinode *dip = (dinode *)(img + 2*BSIZE);
+    for (i = 0; i < sb->ninodes; i++) {
+        if (dip->type == T_DIR && i == parent) {
+            for (j = 0; j < NDIRECT; j++) {
+                ent = img + (((dip->addrs[j]) * BSIZE));
+
+                while (ent->inum != 0) {
+                    if (ent->inum == inode) {
+                        if (ent->inum != parent || parent == 1)
+                            return;
+                    }
+                    ent++;
+                }
+            }
+        }
+        dip++;
+    }
+    die("ERROR: parent directory mismatch.\n");
+}
+
+void chkInodeUsed(uint inode) {
+    short i, j;
+    dirent *ent;
+    dinode *dip = (dinode *)(img + 2*BSIZE);
+
+    if (inode == 1) return;
+
+    for (i = 0; i < sb->ninodes; i++) {
+        if (dip->type == T_DIR) {
+            for (j = 0; j < NDIRECT; j++) {
+                ent = img + (((dip->addrs[j]) * BSIZE));
+
+                while (ent->inum != 0) {
+                    if (ent->inum == inode) {
+                        return;
+                    }
+                    ent++;
+                }
+            }
+        }
+        dip++;
+    }
+    die("ERROR: inode marked use but not found in a directory.\n");
+}
+
+void chkDirOnlyOnce(uint inode) {
+    short used = 0, i, j;
+    dirent *ent;
+    dinode *dip = (dinode *)(img + 2*BSIZE);
+    for (i = 0; i < sb->ninodes; i++) {
+        if (dip->type == T_DIR) {
+            for (j = 0; j < NDIRECT; j++) {
+                ent = img + (((dip->addrs[j]) * BSIZE));
+
+                while (ent->inum != 0) {
+                    if (ent->inum == inode && ent->inum != 1) {
+                        if (strncmp(ent->name, dotdot, 3) != 0 && strncmp(ent->name, dot, 2) != 0)
+                        {
+                            if (++used > 1) {
+                                die("ERROR: directory appears more than once in file system.\n");
+                            }
+                        }
+                    }
+                    ent++;
+                }
+            }
+        }
+        dip++;
+    }
+}
+
+void chkBlockOnlyOnce() {
+
 }
 
 int main(int argc, char **argv) {
@@ -72,6 +153,8 @@ int main(int argc, char **argv) {
     short valid = 0;
     uint *addr;
     struct stat sbuf;
+    dirent *ent;
+    //char buf[BSIZE];
 
     if (argc != 2)
         die("bad args\n");
@@ -89,6 +172,8 @@ int main(int argc, char **argv) {
     sb = (superblock *)(img + BSIZE);
     DEBUG_PRINT("%d %d %d\n", sb->size, sb->nblocks, sb->ninodes);
 
+    chkBlockOnlyOnce();
+
     dinode *dip = (dinode *)(img + 2*BSIZE);
     for (i = 0; i < sb->ninodes; i++) {
         if (i == 1 && dip->type != T_DIR)
@@ -98,10 +183,11 @@ int main(int argc, char **argv) {
             if (dip->type > 3 || dip->type < 0)
                 die("ERROR: bad inode.\n");
 
-            DEBUG_PRINT("%d type: %d\n", i, dip->type);
+            DEBUG_PRINT("\n%d type: %d\n", i, dip->type);
 
             if (dip->type == T_DEV) continue;
 
+            chkInodeUsed(i);
             for (j = 0; j < NDIRECT; j++) {
                 if (dip->addrs[j] >= sb->size)
                     die("ERROR: bad address in inode.\n");
@@ -110,7 +196,7 @@ int main(int argc, char **argv) {
                 if (!valid)
                     die("ERROR: address used by inode but marked free in bitmap.\n");
 
-                DEBUG_PRINT("%d DPTR(%d) -> %d (%d)\n", i, j, dip->addrs[j], valid);
+                //DEBUG_PRINT("%d DPTR(%d) -> %d (%d)\n", i, j, dip->addrs[j], valid);
             }
 
             if (dip->addrs[j] >= sb->size) {
@@ -127,17 +213,74 @@ int main(int argc, char **argv) {
                     if (!valid)
                         die("ERROR: address used by inode but marked free in bitmap.\n");
 
-                    DEBUG_PRINT("%d  DPTR(%d) -> %d (%d)\n", i, j+12, addr[j], valid);
+                    if (addr[j] == 0) break;
+                    //DEBUG_PRINT("%d  DPTR(%d) -> %d (%d)\n", i, j+12, addr[j], valid);
                 }
             }
 
-            /*if (dip->type == T_DIR) {
+            if (dip->type == T_DIR) {
+                chkDirOnlyOnce(i);
 
-            }*/
+                short dots = 0;
+                for (j = 0; j < NDIRECT; j++) {
+                    ent = img + (((dip->addrs[j]) * BSIZE));
+
+                    while (ent->inum != 0) {
+                        if (strncmp(ent->name, dot, 2) == 0) {
+                            dots++;
+                            if (ent->inum != i) {
+                                if (i == 1) {
+                                    die("ERROR: root directory does not exist.\n");
+                                }
+                                else {
+                                    die("ERROR: directory not properly formatted.\n");
+                                }
+                            }
+                        }
+                        else if (strncmp(ent->name, dotdot, 3) == 0) {
+                            dots++;
+                            if (i == 1) { // is root
+                                if (ent->inum != 1) {
+                                    die("ERROR: root directory does not exist.\n");
+                                }
+                            }
+                            else {
+                                chkParentDir(i, ent->inum);
+                            }
+
+                        }
+                        else {
+                            dinode *tmp = (dinode *)(img + 2*BSIZE);
+                            int n;
+                            for (n = 0; n < sb->ninodes; n++) {
+                                if (n == ent->inum) {
+                                    if (tmp->type < 1 || tmp->type > 3) {
+                                        die("ERROR: inode referred to in directory but marked free.\n");
+                                    }
+                                    else {
+                                        break;
+                                    }
+                                }
+                                tmp++;
+                            }
+                        }
+
+                        DEBUG_PRINT("%d  %s (%d)\n", i, ent->name, ent->inum);
+                        ent++;
+                    }
+                }
+
+                if (dots != 2) {
+                    die("ERROR: directory not properly formatted.\n");
+                }
+            }
         }
 
         dip++;
     }
+
+    //chkBlocksActuallyUsed
+    //die("ERROR: bitmap marks block in use but it is not in use.\n");
 
     return 0;
 }
