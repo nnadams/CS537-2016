@@ -9,6 +9,13 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
+//#define DEBUG
+#ifdef DEBUG
+# define DEBUG_PRINT(x, ...) printf(x, ##__VA_ARGS__)
+#else
+# define DEBUG_PRINT(x, ...) do {} while (0)
+#endif
+
 #define error(M, ...) fprintf(stderr, M, ##__VA_ARGS__);
 #define die(M, ...) { error(M, ##__VA_ARGS__); exit(1); }
 
@@ -80,7 +87,7 @@ int main(int argc, char **argv) {
     assert(img != MAP_FAILED);
 
     sb = (superblock *)(img + BSIZE);
-    printf("%d %d %d\n", sb->size, sb->nblocks, sb->ninodes);
+    DEBUG_PRINT("%d %d %d\n", sb->size, sb->nblocks, sb->ninodes);
 
     dinode *dip = (dinode *)(img + 2*BSIZE);
     for (i = 0; i < sb->ninodes; i++) {
@@ -91,7 +98,7 @@ int main(int argc, char **argv) {
             if (dip->type > 3 || dip->type < 0)
                 die("bad inode\n");
 
-            printf("%d type: %d\n", i, dip->type);
+            DEBUG_PRINT("%d type: %d\n", i, dip->type);
 
             if (dip->type == T_DEV) continue;
 
@@ -103,14 +110,14 @@ int main(int argc, char **argv) {
                 if (!valid)
                     die("address used by inode but marked free in bitmap\n");
 
-                printf("%d DPTR(%d) -> %d (%d)\n", i, j, dip->addrs[j], valid);
+                DEBUG_PRINT("%d DPTR(%d) -> %d (%d)\n", i, j, dip->addrs[j], valid);
             }
 
             if (dip->addrs[j] >= sb->size) {
                 die("bad address in inode\n");
             }
             else if (dip->addrs[j] != 0) {
-                printf("%d IPTR -> %d\n", i, dip->addrs[j]);
+                DEBUG_PRINT("%d IPTR -> %d\n", i, dip->addrs[j]);
                 addr = img + (((dip->addrs[j]) * BSIZE));
                 for (j = 0; j < BSIZE/4; j++) {
                     if (addr[j] >= sb->size)
@@ -120,7 +127,7 @@ int main(int argc, char **argv) {
                     if (!valid)
                         die("address used by inode but marked free in bitmap\n");
 
-                    printf("%d  DPTR(%d) -> %d (%d)\n", i, j+12, addr[j], valid);
+                    DEBUG_PRINT("%d  DPTR(%d) -> %d (%d)\n", i, j+12, addr[j], valid);
                 }
             }
 
