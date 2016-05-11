@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 # define DEBUG_PRINT(x, ...) printf(x, ##__VA_ARGS__)
 #else
@@ -54,7 +54,7 @@ typedef struct _dirent {
 // Bitmap bits per block
 #define BPB                 (BSIZE*8)
 // Block containing bit for block b
-#define BBLOCK(b, ninodes)  (b/BPB + (ninodes)/IPB + 3)
+#define BBLOCK(b, ninodes)  ((b)/BPB + (ninodes)/IPB + 3)
 
 //#define DBLOCK(b, ninodes, nblocks)  (((nblocks)/BPB + (ninodes)/IPB + 3))
 
@@ -144,12 +144,24 @@ void chkDirOnlyOnce(uint inode) {
     }
 }
 
-void chkBlockOnlyOnce() {
+void chkBlockOnlyOnce(uint block) {
+    short used = 0, i, j;
+    dinode *dip = (dinode *)(img + 2*BSIZE);
 
+    if (block == 0) return;
+
+    for (i = 0; i < sb->ninodes; i++) {
+        for (j = 0; j < NDIRECT; j++) {
+            if (dip->addrs[j] == block) used++;
+            if (used > 1)
+                die("ERROR: address used more than once.\n");
+        }
+        dip++;
+    }
 }
 
 int main(int argc, char **argv) {
-    int i, j, rc, fd;
+    int i, j, k, rc, fd;
     short valid = 0;
     uint *addr;
     struct stat sbuf;
@@ -171,8 +183,6 @@ int main(int argc, char **argv) {
 
     sb = (superblock *)(img + BSIZE);
     DEBUG_PRINT("%d %d %d\n", sb->size, sb->nblocks, sb->ninodes);
-
-    chkBlockOnlyOnce();
 
     dinode *dip = (dinode *)(img + 2*BSIZE);
     for (i = 0; i < sb->ninodes; i++) {
@@ -196,7 +206,9 @@ int main(int argc, char **argv) {
                 if (!valid)
                     die("ERROR: address used by inode but marked free in bitmap.\n");
 
-                //DEBUG_PRINT("%d DPTR(%d) -> %d (%d)\n", i, j, dip->addrs[j], valid);
+                chkBlockOnlyOnce(dip->addrs[j]);
+
+                DEBUG_PRINT("%d DPTR(%d) -> %d (%d)\n", i, j, dip->addrs[j], valid);
             }
 
             if (dip->addrs[j] >= sb->size) {
@@ -283,7 +295,35 @@ int main(int argc, char **argv) {
     }
 
     //chkBlocksActuallyUsed
-    //die("ERROR: bitmap marks block in use but it is not in use.\n");
+    uint *v;
+    i = BBLOCK(sb->nblocks - 1, sb->ninodes) + 1;
+    for (; i < sb->nblocks; i++) {
+        v = img + (BBLOCK(i, sb->ninodes) * BSIZE);
+        v += i / 32;
+        if ((((*v) >> (i % 32)) & 1) == 1) {
+            //DEBUG_PRINT("\nChk %d", i);
+            dinode *dip = (dinode *)(img + 2*BSIZE);
+            for (j = 0; j < sb->ninodes; j++) {
+                for (k = 0; k < NDIRECT; k++) {
+                    if (dip->addrs[k] == i) goto nxtBlock;
+                }
+                if (dip->addrs[k] != 0) {
+                    if (i == dip->addrs[k]) goto nxtBlock;
+                    addr = img + (((dip->addrs[k]) * BSIZE));
+                    for (k = 0; k < BSIZE/4; k++) {
+                        if (addr[k] == i) goto nxtBlock;
+                    }
+                }
+                dip++;
+            }
+        }
+        else {
+            continue;
+        }
+        die("ERROR: bitmap marks block in use but it is not in use.\n");
+
+        nxtBlock: ;
+    }
 
     return 0;
 }
