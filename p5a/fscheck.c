@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-//#define DEBUG
+#define DEBUG
 #ifdef DEBUG
 # define DEBUG_PRINT(x, ...) printf(x, ##__VA_ARGS__)
 #else
@@ -166,6 +166,7 @@ void chkCorrectLinkCount(uint inode, uint nlink) {
     dinode *dip = (dinode *)(img + 2*BSIZE);
     for (i = 0; i < sb->ninodes; i++) {
         if (dip->type == T_DIR) {
+            DEBUG_PRINT("[%d]", i);
             for (j = 0; j < NDIRECT; j++) {
                 ent = img + (((dip->addrs[j]) * BSIZE));
 
@@ -180,8 +181,10 @@ void chkCorrectLinkCount(uint inode, uint nlink) {
         dip++;
     }
 
-    if (links != nlink)
+    if (links != nlink) {
+        DEBUG_PRINT("%d: f=%d a=%d", inode, links, nlink);
         die("ERROR: bad reference count for file.\n");
+    }
 }
 
 int main(int argc, char **argv) {
