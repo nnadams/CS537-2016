@@ -9,7 +9,7 @@
 #include <fcntl.h>
 #include <sys/mman.h>
 
-#define DEBUG
+//#define DEBUG
 #ifdef DEBUG
 # define DEBUG_PRINT(x, ...) printf(x, ##__VA_ARGS__)
 #else
@@ -162,15 +162,16 @@ void chkBlockOnlyOnce(uint block) {
 
 void chkCorrectLinkCount(uint inode, uint nlink) {
     uint links = 0, i, j;
-    dirent *ent;
+    dirent *ent, *max;
     dinode *dip = (dinode *)(img + 2*BSIZE);
     for (i = 0; i < sb->ninodes; i++) {
         if (dip->type == T_DIR) {
             DEBUG_PRINT("[%d]", i);
             for (j = 0; j < NDIRECT; j++) {
                 ent = img + (((dip->addrs[j]) * BSIZE));
+                max = img + (((dip->addrs[j]) * BSIZE) + BSIZE);
 
-                while (ent->inum != 0) {
+                while (ent->inum != 0 && ent < max) {
                     if (ent->inum == inode) {
                         links++;
                     }
@@ -220,7 +221,7 @@ int main(int argc, char **argv) {
             if (dip->type > 3 || dip->type < 0)
                 die("ERROR: bad inode.\n");
 
-            DEBUG_PRINT("\n%d type: %d\n", i, dip->type);
+            DEBUG_PRINT("\n%d type: %d (%d)\n", i, dip->type, dip->nlink);
 
             if (dip->type == T_DEV) continue;
 
@@ -253,7 +254,7 @@ int main(int argc, char **argv) {
                         die("ERROR: address used by inode but marked free in bitmap.\n");
 
                     if (addr[j] == 0) break;
-                    //DEBUG_PRINT("%d  DPTR(%d) -> %d (%d)\n", i, j+12, addr[j], valid);
+                    DEBUG_PRINT("%d  iDPTR(%d) -> %d (%d)\n", i, j+12, addr[j], valid);
                 }
             }
 
@@ -265,10 +266,13 @@ int main(int argc, char **argv) {
                 chkDirOnlyOnce(i);
 
                 short dots = 0;
+                dirent *max;
                 for (j = 0; j < NDIRECT; j++) {
                     ent = img + (((dip->addrs[j]) * BSIZE));
+                    max = img + (((dip->addrs[j]) * BSIZE) + BSIZE);
 
-                    while (ent->inum != 0) {
+                    while (ent->inum != 0 && ent < max) {
+                        DEBUG_PRINT("%p < %p", ent, max);
                         if (strncmp(ent->name, dot, 2) == 0) {
                             dots++;
                             if (ent->inum != i) {
@@ -314,6 +318,8 @@ int main(int argc, char **argv) {
                         DEBUG_PRINT("%d  %s (%d)\n", i, ent->name, ent->inum);
                         ent++;
                     }
+                    if (dip->addrs[j] != 0)
+                        DEBUG_PRINT("---\n");
                 }
 
                 if (dots != 2) {
